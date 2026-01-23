@@ -1,0 +1,134 @@
+import { Button } from "@/components/button";
+import { Loading } from "@/components/loading";
+import { NextTrip } from "@/components/nextTrip";
+import { TripItem } from "@/components/tripItem";
+import { useAuth } from "@/hooks/useAuth";
+import { TripDetails, tripServer } from "@/server/trip-server";
+import { router } from "expo-router";
+import { useEffect, useState } from "react";
+import { FlatList, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+// const trips: TripDetails[] = [
+//   {
+//     id: "1",
+//     destination: "Noruega",
+//     startsAt: dayjs().subtract(7, "month").toString(),
+//     endsAt: dayjs().subtract(7, "month").add(3, "day").toString(),
+//     isConfirmed: true,
+//     image:
+//       "https://plus.unsplash.com/premium_photo-1668017178993-4c8fc9f59872?q=80&w=1471&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+//   },
+//   {
+//     id: "2",
+//     destination: "Londres",
+//     startsAt: dayjs().subtract(5, "month").toString(),
+//     endsAt: dayjs().subtract(5, "month").add(5, "day").toString(),
+//     isConfirmed: true,
+//     image:
+//       "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+//   },
+//   {
+//     id: "3",
+//     destination: "Paris",
+//     startsAt: dayjs().subtract(3, "month").toString(),
+//     endsAt: dayjs().subtract(3, "month").add(4, "day").toString(),
+//     isConfirmed: true,
+//     image:
+//       "https://images.unsplash.com/photo-1550340499-a6c60fc8287c?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+//   },
+//   {
+//     id: "4",
+//     destination: "Los Angeles",
+//     startsAt: dayjs().subtract(1, "month").toString(),
+//     endsAt: dayjs().subtract(1, "month").add(6, "day").toString(),
+//     isConfirmed: true,
+//     image:
+//       "https://images.unsplash.com/flagged/photo-1575555201693-7cd442b8023f?q=80&w=1632&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+//   },
+//   {
+//     id: "5",
+//     destination: "Rio de Janeiro",
+//     startsAt: dayjs().add(3, "month").toString(),
+//     endsAt: dayjs().add(3, "month").add(3, "day").toString(),
+//     isConfirmed: true,
+//     image:
+//       "https://images.unsplash.com/photo-1483729558449-99ef09a8c325?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+//   },
+// ];
+
+export default function Index() {
+  const { signOut } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [trips, setTrips] = useState<TripDetails[]>([]);
+  const [nextTrip, setNextTrip] = useState<TripDetails | null>(null);
+
+  async function getTrips() {
+    try {
+      setIsLoading(true);
+
+      const { data: dataAllTrips } = await tripServer.getAllTripsByTraveler();
+      const { data: dataNextTrip } = await tripServer.getNextTripsByTraveler();
+
+      setTrips(dataAllTrips.trips);
+      setNextTrip(dataNextTrip.nextTrip);
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    getTrips();
+  }, []);
+
+  return isLoading ? (
+    <Loading />
+  ) : (
+    <SafeAreaView className="flex-1 bg-zinc-950">
+      <View className="px-5 pt-4">
+        <View className="flex-row items-center justify-between">
+          <Text className="text-zinc-100 text-2xl font-bold">
+            Explore suas viagens
+          </Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={signOut}>
+            <Text className="text-lime-300 text-base">Sair</Text>
+          </TouchableOpacity>
+        </View>
+
+        {nextTrip && <NextTrip trip={nextTrip} />}
+
+        <Text className="text-zinc-400 mt-8 mb-3">Minhas viagens</Text>
+      </View>
+
+      <FlatList
+        keyExtractor={(item) => item.tripId}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
+        data={trips}
+        renderItem={(trip) => (
+          <TripItem key={trip.item.tripId} trip={trip.item} />
+        )}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View className="flex-1 items-center">
+            <Text className="text-zinc-100 font-bold mt-5">
+              Nenhuma viagem encontrada
+            </Text>
+          </View>
+        }
+      />
+
+      <View className="px-5 pb-6 pt-3">
+        <Button
+          className="w-full"
+          onPress={() => {
+            router.push("/(app)/trip/create");
+          }}
+        >
+          <Text className="text-zinc-950 font-semibold">Criar nova viagem</Text>
+        </Button>
+      </View>
+    </SafeAreaView>
+  );
+}
