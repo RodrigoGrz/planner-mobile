@@ -4,6 +4,10 @@ Aplicação mobile do **Planner**, um app para **planejamento e organização de
 
 O app permite que usuários criem viagens, organizem atividades por dia e compartilhem informações importantes com outras pessoas envolvidas.
 
+## 🎥 Demonstração
+
+![Planner App Demo](./docs/app-v-1.0.0-gif)
+
 ## 🎯 Objetivo do app
 
 O Planner nasceu para resolver um problema comum ao planejar viagens:
