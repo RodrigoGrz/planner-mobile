@@ -6,7 +6,7 @@ O app permite que usuários criem viagens, organizem atividades por dia e compar
 
 ## 🎥 Demonstração
 
-![Planner App Demo](./docs/app-v-1.0.0-gif)
+![Planner App Demo](./docs/app-v-1.0.0-gif.gif)
 
 ## 🎯 Objetivo do app
 
