@@ -45,7 +45,8 @@ Mesmo em sua versão inicial, o app já é funcional e pode ser usado para plane
 ### 1. Clone o repositório
 
 ```bash
-git clone
+git clone https://github.com/RodrigoGrz/planner-mobile
+cd planner-mobile
 ```
 
 ### 2. Rodando app
