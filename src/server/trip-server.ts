@@ -7,7 +7,7 @@ export type TripDetails = {
   startsAt: string;
   endsAt: string;
   isConfirmed: boolean;
-  image?: string | null;
+  coverImageUrl: string | null;
 };
 
 export type TripByID = {
@@ -15,6 +15,7 @@ export type TripByID = {
   destination: string;
   startsAt: Date;
   endsAt: Date;
+  coverImageUrl: string | null;
   ownerName: string;
   createdAt: Date;
   updatedAt: Date;
@@ -22,7 +23,7 @@ export type TripByID = {
 
 type TripCreate = Omit<
   TripDetails,
-  "id" | "isConfirmed" | "participantId" | "tripId"
+  "id" | "isConfirmed" | "participantId" | "tripId" | "coverImageUrl"
 > & {
   emails_to_invite: string[];
 };
@@ -91,10 +92,27 @@ async function getNextTripsByTraveler() {
   }
 }
 
+async function uploadTripImage(tripId: string, selectedImage: string) {
+  const formData = new FormData();
+
+  formData.append("file", {
+    uri: selectedImage!,
+    name: "cover.jpg",
+    type: "image/jpeg",
+  } as any);
+
+  await api.post(`/trips/${tripId}/image`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+}
+
 export const tripServer = {
   getById,
   create,
   update,
   getAllTripsByTraveler,
   getNextTripsByTraveler,
+  uploadTripImage,
 };

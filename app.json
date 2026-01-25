@@ -33,7 +33,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O aplicativo acessa suas fotos para que você possa compartilhá-las com o grupo da viagem."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

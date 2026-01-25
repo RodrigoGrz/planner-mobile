@@ -9,54 +9,6 @@ import { useEffect, useState } from "react";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// const trips: TripDetails[] = [
-//   {
-//     id: "1",
-//     destination: "Noruega",
-//     startsAt: dayjs().subtract(7, "month").toString(),
-//     endsAt: dayjs().subtract(7, "month").add(3, "day").toString(),
-//     isConfirmed: true,
-//     image:
-//       "https://plus.unsplash.com/premium_photo-1668017178993-4c8fc9f59872?q=80&w=1471&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-//   },
-//   {
-//     id: "2",
-//     destination: "Londres",
-//     startsAt: dayjs().subtract(5, "month").toString(),
-//     endsAt: dayjs().subtract(5, "month").add(5, "day").toString(),
-//     isConfirmed: true,
-//     image:
-//       "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-//   },
-//   {
-//     id: "3",
-//     destination: "Paris",
-//     startsAt: dayjs().subtract(3, "month").toString(),
-//     endsAt: dayjs().subtract(3, "month").add(4, "day").toString(),
-//     isConfirmed: true,
-//     image:
-//       "https://images.unsplash.com/photo-1550340499-a6c60fc8287c?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-//   },
-//   {
-//     id: "4",
-//     destination: "Los Angeles",
-//     startsAt: dayjs().subtract(1, "month").toString(),
-//     endsAt: dayjs().subtract(1, "month").add(6, "day").toString(),
-//     isConfirmed: true,
-//     image:
-//       "https://images.unsplash.com/flagged/photo-1575555201693-7cd442b8023f?q=80&w=1632&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-//   },
-//   {
-//     id: "5",
-//     destination: "Rio de Janeiro",
-//     startsAt: dayjs().add(3, "month").toString(),
-//     endsAt: dayjs().add(3, "month").add(3, "day").toString(),
-//     isConfirmed: true,
-//     image:
-//       "https://images.unsplash.com/photo-1483729558449-99ef09a8c325?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-//   },
-// ];
-
 export default function Index() {
   const { signOut } = useAuth();
   const [isLoading, setIsLoading] = useState(true);

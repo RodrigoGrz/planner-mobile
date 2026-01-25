@@ -1,5 +1,6 @@
 import { validateInput } from "@/utils/validateInput";
 import dayjs from "dayjs";
+import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { Alert, Image, Keyboard, Text, View } from "react-native";
 import { DateData } from "react-native-calendars";
@@ -13,7 +14,10 @@ import { Modal } from "@/components/modal";
 import {
   ArrowRight,
   AtSign,
+  CheckCircle,
   Calendar as IconCalendar,
+  ImageMinus,
+  ImageUp,
   MapPin,
   Settings2,
   UserRoundPlus,
@@ -33,6 +37,7 @@ enum MODAL {
   NONE = 0,
   CALENDAR = 1,
   GUESTS = 2,
+  IMAGE = 3,
 }
 
 export default function Create() {
@@ -45,6 +50,7 @@ export default function Create() {
   const [destination, setDestination] = useState("");
   const [emailToInvite, setEmailToInvite] = useState("");
   const [emailsToInvite, setEmailsToInvite] = useState<string[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // MODAL
   const [showModal, setShowModal] = useState(MODAL.NONE);
@@ -137,8 +143,11 @@ export default function Create() {
         startsAt: dayjs(selectedDates.startsAt?.dateString).toString(),
         endsAt: dayjs(selectedDates.endsAt?.dateString).toString(),
         emails_to_invite: emailsToInvite,
-        image: "",
       });
+
+      if (selectedImage) {
+        await tripServer.uploadTripImage(newTrip.tripId, selectedImage);
+      }
 
       Alert.alert("Nova viagem", "Viagem criado com sucesso!", [
         {
@@ -149,6 +158,27 @@ export default function Create() {
     } catch (error) {
       setIsCreatingTrip(false);
     }
+  }
+
+  async function pickImageAsync() {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setSelectedImage(result.assets[0].uri);
+    } else if (result.canceled && selectedImage) {
+      alert("Você mantevem a mesma imagem.");
+    } else {
+      alert("Você não selecionou nenhuma imagem.");
+    }
+  }
+
+  function removeImage() {
+    setSelectedImage(null);
+    setShowModal(MODAL.NONE);
   }
 
   return (
@@ -187,6 +217,23 @@ export default function Create() {
             value={selectedDates.formatDatesInText}
           />
         </Input>
+
+        <View className="border-b py-3 border-zinc-800">
+          {selectedImage ? (
+            <Button
+              variant="secondary"
+              onPress={() => setShowModal(MODAL.IMAGE)}
+            >
+              <CheckCircle color={colors.lime[300]} size={20} />
+              <Button.Title>Alterar imagem</Button.Title>
+            </Button>
+          ) : (
+            <Button variant="secondary" onPress={pickImageAsync}>
+              <ImageUp color={colors.zinc[200]} size={20} />
+              <Button.Title>Imagem do lugar</Button.Title>
+            </Button>
+          )}
+        </View>
 
         {stepForm === StepForm.ADD_EMAILS && (
           <>
@@ -237,6 +284,32 @@ export default function Create() {
           termos de uso e políticas de privacidade.
         </Text>
       </Text>
+
+      <Modal
+        title="Imagem selecionada"
+        subtitle="Altere ou remova a imagem selecionada"
+        visible={showModal === MODAL.IMAGE}
+        onClose={() => setShowModal(MODAL.NONE)}
+      >
+        <View className="gap-4 my-4">
+          {selectedImage && (
+            <Image
+              source={{ uri: selectedImage }}
+              className="w-full h-80 rounded-md"
+            />
+          )}
+        </View>
+        <View className="flex-1 gap-4">
+          <Button onPress={pickImageAsync}>
+            <ImageUp color={colors.lime[950]} size={20} />
+            <Button.Title>Alterar imagem</Button.Title>
+          </Button>
+          <Button variant="secondary" onPress={removeImage}>
+            <ImageMinus color={colors.zinc[200]} size={20} />
+            <Button.Title>Remover imagem</Button.Title>
+          </Button>
+        </View>
+      </Modal>
 
       <Modal
         title="Selecionar datas"

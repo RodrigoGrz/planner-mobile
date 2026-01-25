@@ -12,13 +12,15 @@ export function NextTrip({ trip }: NextTripProps) {
       <Text className="text-zinc-400 mt-6 mb-3">Próxima viagem</Text>
 
       <View className="w-full h-48 rounded-xl overflow-hidden">
-        <Image
-          source={{
-            uri: "https://images.unsplash.com/photo-1484821582734-6c6c9f99a672?q=80&w=1633&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-          }}
-          className="w-full h-full"
-          resizeMode="cover"
-        />
+        {trip.coverImageUrl ? (
+          <Image
+            source={{ uri: trip.coverImageUrl }}
+            className="w-full h-full"
+            resizeMode="cover"
+          />
+        ) : (
+          <View className="w-full h-full rounded-lg bg-gray-400" />
+        )}
 
         <View className="absolute bottom-0 w-full p-4 bg-black/60">
           <Text className="text-zinc-100 text-lg font-semibold">
