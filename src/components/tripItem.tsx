@@ -19,8 +19,11 @@ export function TripItem({ trip }: TripItemProps) {
       onPress={handlePress}
       className="flex-row bg-zinc-900 rounded-xl p-3 mb-4"
     >
-      {trip.image ? (
-        <Image source={{ uri: trip.image }} className="w-16 h-16 rounded-lg" />
+      {trip.coverImageUrl ? (
+        <Image
+          source={{ uri: trip.coverImageUrl }}
+          className="w-16 h-16 rounded-lg"
+        />
       ) : (
         <View className="w-16 h-16 rounded-lg bg-gray-400" />
       )}
