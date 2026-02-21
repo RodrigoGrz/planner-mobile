@@ -6,7 +6,7 @@ import { Alert, Image, Keyboard, Text, View } from "react-native";
 import { DateData } from "react-native-calendars";
 
 import { Button } from "@/components/button";
-import { Calendar } from "@/components/calendar";
+import { Calendar as CalendarIcon } from "@/components/calendar";
 import { GuestEmail } from "@/components/email";
 import { Input } from "@/components/input";
 import { Modal } from "@/components/modal";
@@ -23,9 +23,12 @@ import {
   UserRoundPlus,
 } from "lucide-react-native";
 
+import { Toggle } from "@/components/toggle";
 import { tripServer } from "@/server/trip-server";
 import { colors } from "@/styles/colors";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
+import { calendarPermission } from "@/utils/toggle/calendar-permission";
+import { syncTripWithCalendar } from "@/utils/toggle/calendar-sync";
 import { router } from "expo-router";
 
 enum StepForm {
@@ -51,6 +54,7 @@ export default function Create() {
   const [emailToInvite, setEmailToInvite] = useState("");
   const [emailsToInvite, setEmailsToInvite] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isEnabled, setIsEnabled] = useState(false);
 
   // MODAL
   const [showModal, setShowModal] = useState(MODAL.NONE);
@@ -123,6 +127,22 @@ export default function Create() {
     setEmailToInvite("");
   }
 
+  async function handleToggleCalendarSync() {
+    if (!isEnabled) {
+      const granted = await calendarPermission();
+
+      if (!granted) {
+        Alert.alert(
+          "Permissão necessária",
+          "Para sincronizar com o calendário, permita o acesso.",
+        );
+        return;
+      }
+    }
+
+    setIsEnabled((prev) => !prev);
+  }
+
   async function saveTrip(tripId: string) {
     try {
       router.navigate(`/trip/${tripId}`);
@@ -140,8 +160,8 @@ export default function Create() {
 
       const newTrip = await tripServer.create({
         destination,
-        startsAt: dayjs(selectedDates.startsAt?.dateString).toString(),
-        endsAt: dayjs(selectedDates.endsAt?.dateString).toString(),
+        startsAt: dayjs(selectedDates.startsAt?.dateString).toISOString(),
+        endsAt: dayjs(selectedDates.endsAt?.dateString).toISOString(),
         emails_to_invite: emailsToInvite,
       });
 
@@ -149,13 +169,30 @@ export default function Create() {
         await tripServer.uploadTripImage(newTrip.tripId, selectedImage);
       }
 
-      Alert.alert("Nova viagem", "Viagem criado com sucesso!", [
+      if (isEnabled && selectedDates.startsAt && selectedDates.endsAt) {
+        try {
+          await syncTripWithCalendar({
+            destination,
+            startsAt: selectedDates.startsAt.dateString,
+            endsAt: selectedDates.endsAt.dateString,
+          });
+        } catch {
+          Alert.alert(
+            "Calendário",
+            "A viagem foi criada, mas não foi possível sincronizar com o calendário.",
+          );
+        }
+      }
+
+      Alert.alert("Nova viagem", "Viagem criada com sucesso!", [
         {
           text: "OK. Continuar.",
           onPress: () => saveTrip(newTrip.tripId),
         },
       ]);
-    } catch (error) {
+    } catch {
+      Alert.alert("Erro", "Não foi possível criar a viagem. Tente novamente.");
+    } finally {
       setIsCreatingTrip(false);
     }
   }
@@ -217,6 +254,15 @@ export default function Create() {
             value={selectedDates.formatDatesInText}
           />
         </Input>
+
+        <Toggle
+          variant="secondary"
+          onChange={handleToggleCalendarSync}
+          value={isEnabled}
+          position="right"
+        >
+          <Toggle.Label>Sincronizar com o calendário</Toggle.Label>
+        </Toggle>
 
         <View className="border-b py-3 border-zinc-800">
           {selectedImage ? (
@@ -318,7 +364,7 @@ export default function Create() {
         onClose={() => setShowModal(MODAL.NONE)}
       >
         <View className="gap-4 mt-4">
-          <Calendar
+          <CalendarIcon
             minDate={dayjs().toISOString()}
             onDayPress={handleSelectDate}
             markedDates={selectedDates.dates}

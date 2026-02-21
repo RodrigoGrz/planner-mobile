@@ -39,6 +39,12 @@
         {
           "photosPermission": "O aplicativo acessa suas fotos para que você possa compartilhá-las com o grupo da viagem."
         }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "O aplicativo precisa acessar seu calendário."
+        }
       ]
     ],
     "experiments": {
