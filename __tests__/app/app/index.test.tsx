@@ -46,10 +46,10 @@ jest.mock("@/components/button", () => {
 });
 
 import {
-    fireEvent,
-    render,
-    screen,
-    waitFor,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
 } from "@testing-library/react-native";
 
 import Index from "@/app/(app)/index";
