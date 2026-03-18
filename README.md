@@ -58,3 +58,9 @@ cd planner-mobile
 ```bash
 npm run start
 ```
+
+### 3. Rodando testes
+
+```bash
+npm run test
+```
