@@ -15,6 +15,7 @@ export function TripItem({ trip }: TripItemProps) {
 
   return (
     <TouchableOpacity
+      accessibilityRole="button"
       activeOpacity={0.7}
       onPress={handlePress}
       className="flex-row bg-zinc-900 rounded-xl p-3 mb-4"

@@ -97,6 +97,7 @@ export default function SignUp() {
             />
 
             <Text
+              testID="toggle-password"
               onPress={() => setShowPassword((prev) => !prev)}
               className="ml-2"
             >

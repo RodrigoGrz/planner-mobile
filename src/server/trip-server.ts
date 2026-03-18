@@ -15,7 +15,7 @@ export type TripByID = {
   destination: string;
   startsAt: Date;
   endsAt: Date;
-  coverImageUrl: string | null;
+  coverImageUrl?: string | null;
   ownerName: string;
   createdAt: Date;
   updatedAt: Date;
@@ -64,7 +64,10 @@ async function update({
   destination,
   startsAt,
   endsAt,
-}: Omit<TripDetails, "isConfirmed" | "image" | "participantId">) {
+}: Omit<
+  TripDetails,
+  "isConfirmed" | "image" | "participantId" | "coverImageUrl"
+>) {
   try {
     await api.put(`/trips/${tripId}/update`, {
       destination,
