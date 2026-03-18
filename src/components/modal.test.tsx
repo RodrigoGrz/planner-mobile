@@ -3,7 +3,6 @@ import { fireEvent, render } from "@testing-library/react-native";
 import { Text } from "react-native";
 
 jest.mock("@/components/modal", () => {
-  const React = require("react");
   const { View, Text, TouchableOpacity } = require("react-native");
 
   return {

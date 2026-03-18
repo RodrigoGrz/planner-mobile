@@ -2,14 +2,12 @@ import { TripItem } from "@/components/tripItem";
 import { fireEvent, render } from "@testing-library/react-native";
 import dayjs from "dayjs";
 
-// 👇 mock do router
 jest.mock("expo-router", () => ({
   router: {
     push: jest.fn(),
   },
 }));
 
-// 👇 mock do Badge
 jest.mock("@/components/badge", () => ({
   Badge: () => {
     const { Text } = require("react-native");
