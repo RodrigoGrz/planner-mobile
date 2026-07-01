@@ -8,11 +8,8 @@ jest.mock("@/hooks/useAuth", () => ({
   useAuth: jest.fn(),
 }));
 
-jest.mock("@/server/trip-server", () => ({
-  tripServer: {
-    getAllTripsByTraveler: jest.fn(),
-    getNextTripsByTraveler: jest.fn(),
-  },
+jest.mock("@/hooks/useTrips", () => ({
+  useTrips: jest.fn(),
 }));
 
 jest.mock("@/components/loading", () => {
@@ -54,7 +51,7 @@ import {
 
 import Index from "@/app/(app)/index";
 import { useAuth } from "@/hooks/useAuth";
-import { tripServer } from "@/server/trip-server";
+import { useTrips } from "@/hooks/useTrips";
 import { router } from "expo-router";
 
 describe("Index (Home)", () => {
@@ -67,6 +64,12 @@ describe("Index (Home)", () => {
       signOut: jest.fn(),
     });
 
+    (useTrips as jest.Mock).mockReturnValue({
+      trips: [],
+      nextTrip: null,
+      status: "loading",
+    });
+
     render(<Index />);
 
     expect(screen.getByTestId("loading-indicator")).toBeTruthy();
@@ -77,16 +80,10 @@ describe("Index (Home)", () => {
       signOut: jest.fn(),
     });
 
-    (tripServer.getAllTripsByTraveler as jest.Mock).mockResolvedValue({
-      data: {
-        trips: [{ tripId: "1" }, { tripId: "2" }],
-      },
-    });
-
-    (tripServer.getNextTripsByTraveler as jest.Mock).mockResolvedValue({
-      data: {
-        nextTrip: { tripId: "99" },
-      },
+    (useTrips as jest.Mock).mockReturnValue({
+      trips: [{ tripId: "1" }, { tripId: "2" }],
+      nextTrip: { tripId: "99" },
+      status: "ready",
     });
 
     render(<Index />);
@@ -103,12 +100,10 @@ describe("Index (Home)", () => {
       signOut: jest.fn(),
     });
 
-    (tripServer.getAllTripsByTraveler as jest.Mock).mockResolvedValue({
-      data: { trips: [] },
-    });
-
-    (tripServer.getNextTripsByTraveler as jest.Mock).mockResolvedValue({
-      data: { nextTrip: null },
+    (useTrips as jest.Mock).mockReturnValue({
+      trips: [],
+      nextTrip: null,
+      status: "ready",
     });
 
     render(<Index />);
@@ -122,12 +117,10 @@ describe("Index (Home)", () => {
     const signOutMock = jest.fn();
     (useAuth as jest.Mock).mockReturnValue({ signOut: signOutMock });
 
-    (tripServer.getAllTripsByTraveler as jest.Mock).mockResolvedValue({
-      data: { trips: [] },
-    });
-
-    (tripServer.getNextTripsByTraveler as jest.Mock).mockResolvedValue({
-      data: { nextTrip: null },
+    (useTrips as jest.Mock).mockReturnValue({
+      trips: [],
+      nextTrip: null,
+      status: "ready",
     });
 
     render(<Index />);
@@ -141,11 +134,10 @@ describe("Index (Home)", () => {
 
   it("should navigate to create trip", async () => {
     (useAuth as jest.Mock).mockReturnValue({ signOut: jest.fn() });
-    (tripServer.getAllTripsByTraveler as jest.Mock).mockResolvedValue({
-      data: { trips: [] },
-    });
-    (tripServer.getNextTripsByTraveler as jest.Mock).mockResolvedValue({
-      data: { nextTrip: null },
+    (useTrips as jest.Mock).mockReturnValue({
+      trips: [],
+      nextTrip: null,
+      status: "ready",
     });
 
     render(<Index />);
