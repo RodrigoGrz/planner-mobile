@@ -24,6 +24,10 @@ import {
 } from "lucide-react-native";
 
 import { Toggle } from "@/components/toggle";
+import { useAuth } from "@/hooks/useAuth";
+import { useNetwork } from "@/contexts/NetworkContext";
+import { seedTripDetail } from "@/repositories/trip-repository";
+import { syncTravelerTrips, syncTripDetail } from "@/services/sync-service";
 import { tripServer } from "@/server/trip-server";
 import { colors } from "@/styles/colors";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
@@ -44,6 +48,9 @@ enum MODAL {
 }
 
 export default function Create() {
+  const { user } = useAuth();
+  const { isOnline } = useNetwork();
+
   // LOADING
   const [isCreatingTrip, setIsCreatingTrip] = useState(false);
 
@@ -80,6 +87,13 @@ export default function Create() {
 
     if (stepForm === StepForm.TRIP_DETAILS) {
       return setStepForm(StepForm.ADD_EMAILS);
+    }
+
+    if (!isOnline) {
+      return Alert.alert(
+        "Sem conexão",
+        "Criar viagem requer conexão com a internet.",
+      );
     }
 
     Alert.alert("Nova viagem", "Confirmar viagem?", [
@@ -144,17 +158,36 @@ export default function Create() {
   }
 
   async function saveTrip(tripId: string) {
-    try {
-      router.navigate(`/trip/${tripId}`);
-    } catch (error) {
-      Alert.alert(
-        "Salvar viagem",
-        "Não foi possível salvar o id da viagem no dispositivo.",
-      );
+    if (!selectedDates.startsAt || !selectedDates.endsAt) {
+      return;
     }
+
+    await seedTripDetail({
+      id: tripId,
+      destination,
+      startsAt: dayjs(selectedDates.startsAt.dateString).toISOString(),
+      endsAt: dayjs(selectedDates.endsAt.dateString).toISOString(),
+      ownerName: user?.name ?? "",
+    });
+
+    try {
+      await syncTripDetail(tripId);
+      await syncTravelerTrips();
+    } catch (error) {
+      console.warn("Failed to sync trip after creation:", error);
+    }
+
+    router.navigate(`/trip/${tripId}`);
   }
 
   async function createTrip() {
+    if (!isOnline) {
+      return Alert.alert(
+        "Sem conexão",
+        "Criar viagem requer conexão com a internet.",
+      );
+    }
+
     try {
       setIsCreatingTrip(true);
 

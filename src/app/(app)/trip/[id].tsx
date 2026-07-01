@@ -9,8 +9,12 @@ import { Calendar } from "@/components/calendar";
 import { Input } from "@/components/input";
 import { Loading } from "@/components/loading";
 import { Modal } from "@/components/modal";
+import { SyncingLabel } from "@/components/syncing-label";
+import { useNetwork } from "@/contexts/NetworkContext";
+import { useTripScreenSync } from "@/hooks/useTripScreenSync";
+import { useTrip } from "@/hooks/useTrip";
 import { participantsServer } from "@/server/participants-server";
-import { TripByID, tripServer } from "@/server/trip-server";
+import { tripServer } from "@/server/trip-server";
 import { colors } from "@/styles/colors";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
 import { validateInput } from "@/utils/validateInput";
@@ -26,7 +30,16 @@ import {
 import { Activities } from "./activities";
 import { Details } from "./details";
 
-export type TripData = TripByID & { when: string };
+export type TripData = {
+  id: string;
+  destination: string;
+  startsAt: Date;
+  endsAt: Date;
+  ownerName: string;
+  createdAt: Date;
+  updatedAt: Date;
+  when: string;
+};
 
 enum MODAL {
   NONE = 0,
@@ -35,90 +48,88 @@ enum MODAL {
   CONFIRM_ATTENDANCE = 3,
 }
 
+function buildTripData(trip: NonNullable<ReturnType<typeof useTrip>["trip"]>): TripData {
+  const maxLengthDestination = 14;
+  const destinationText =
+    trip.destination.length > maxLengthDestination
+      ? trip.destination.slice(0, maxLengthDestination) + "..."
+      : trip.destination;
+
+  const starts_at = dayjs(trip.startsAt).format("DD");
+  const ends_at = dayjs(trip.endsAt).format("DD");
+  const month = dayjs(trip.startsAt).format("MMM");
+
+  return {
+    id: trip.id,
+    destination: trip.destination,
+    startsAt: trip.startsAt,
+    endsAt: trip.endsAt,
+    ownerName: trip.ownerName,
+    createdAt: trip.createdAt,
+    updatedAt: trip.updatedAt,
+    when: `${destinationText} de ${starts_at} a ${ends_at} de ${month}.`,
+  };
+}
+
 export default function Trip() {
-  // LOADING
-  const [isLoadingTrip, setIsLoadingTrip] = useState(true);
+  const { isOnline } = useNetwork();
+  const tripParams = useLocalSearchParams<{
+    id: string;
+    participants?: string;
+  }>();
+
+  const { trip: tripFromDb, status, refresh } = useTrip(tripParams.id);
+
+  useTripScreenSync(tripParams.id);
+
   const [isUpdatingTrip, setIsUpdatingTrip] = useState(false);
   const [isConfirmingAttendance, setIsConfirmingAttendance] = useState(false);
-
-  // MODAL
   const [showModal, setShowModal] = useState(MODAL.NONE);
-
-  // DATA
-  const [trip, setTrip] = useState({} as TripData);
   const [option, setOption] = useState<"activity" | "details">("activity");
   const [destination, setDestination] = useState("");
   const [selectedDates, setSelectedDates] = useState({} as DatesSelected);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
 
-  const tripParams = useLocalSearchParams<{
-    id: string;
-    participants?: string;
-  }>();
+  const trip = tripFromDb ? buildTripData(tripFromDb) : null;
 
-  async function getTripDetails() {
-    try {
-      setIsLoadingTrip(true);
-
-      if (tripParams.participants) {
-        setShowModal(MODAL.CONFIRM_ATTENDANCE);
-      }
-
-      if (!tripParams.id) {
-        return router.back();
-      }
-
-      const trip = await tripServer.getById(tripParams.id);
-
-      const maxLengthDestination = 14;
-      const destinationText =
-        trip.destination.length > maxLengthDestination
-          ? trip.destination.slice(0, maxLengthDestination) + "..."
-          : trip.destination;
-
-      const starts_at = dayjs(trip.startsAt).format("DD");
-      const ends_at = dayjs(trip.endsAt).format("DD");
-      const month = dayjs(trip.startsAt).format("MMM");
-
-      setDestination(trip.destination);
-
-      const startsAtCalendar = {
-        dateString: dayjs(trip.startsAt).format("YYYY-MM-DD"),
-        day: dayjs(trip.startsAt).date(),
-        month: dayjs(trip.startsAt).month() + 1,
-        year: dayjs(trip.startsAt).year(),
-        timestamp: dayjs(trip.startsAt).valueOf(),
-      };
-
-      const endsAtCalendar = {
-        dateString: dayjs(trip.endsAt).format("YYYY-MM-DD"),
-        day: dayjs(trip.endsAt).date(),
-        month: dayjs(trip.endsAt).month() + 1,
-        year: dayjs(trip.endsAt).year(),
-        timestamp: dayjs(trip.endsAt).valueOf(),
-      };
-
-      setSelectedDates(
-        calendarUtils.createFromInterval(startsAtCalendar, endsAtCalendar),
-      );
-
-      setTrip({
-        id: trip.id,
-        destination: trip.destination,
-        startsAt: trip.startsAt,
-        endsAt: trip.endsAt,
-        ownerName: trip.ownerName,
-        createdAt: trip.createdAt,
-        updatedAt: trip.updatedAt,
-        when: `${destinationText} de ${starts_at} a ${ends_at} de ${month}.`,
-      });
-    } catch (error) {
-      console.log(error);
-    } finally {
-      setIsLoadingTrip(false);
+  useEffect(() => {
+    if (tripParams.participants) {
+      setShowModal(MODAL.CONFIRM_ATTENDANCE);
     }
-  }
+
+    if (!tripParams.id) {
+      router.back();
+    }
+  }, [tripParams.id, tripParams.participants]);
+
+  useEffect(() => {
+    if (!tripFromDb) {
+      return;
+    }
+
+    setDestination(tripFromDb.destination);
+
+    const startsAtCalendar = {
+      dateString: dayjs(tripFromDb.startsAt).format("YYYY-MM-DD"),
+      day: dayjs(tripFromDb.startsAt).date(),
+      month: dayjs(tripFromDb.startsAt).month() + 1,
+      year: dayjs(tripFromDb.startsAt).year(),
+      timestamp: dayjs(tripFromDb.startsAt).valueOf(),
+    };
+
+    const endsAtCalendar = {
+      dateString: dayjs(tripFromDb.endsAt).format("YYYY-MM-DD"),
+      day: dayjs(tripFromDb.endsAt).date(),
+      month: dayjs(tripFromDb.endsAt).month() + 1,
+      year: dayjs(tripFromDb.endsAt).year(),
+      timestamp: dayjs(tripFromDb.endsAt).valueOf(),
+    };
+
+    setSelectedDates(
+      calendarUtils.createFromInterval(startsAtCalendar, endsAtCalendar),
+    );
+  }, [tripFromDb]);
 
   function handleSelectDate(selectedDay: DateData) {
     const dates = calendarUtils.orderStartsAtAndEndsAt({
@@ -131,8 +142,15 @@ export default function Trip() {
   }
 
   async function handleUpdateTrip() {
+    if (!isOnline) {
+      return Alert.alert(
+        "Sem conexão",
+        "Atualizar viagem requer conexão com a internet.",
+      );
+    }
+
     try {
-      if (!tripParams.id) {
+      if (!tripParams.id || !trip) {
         return;
       }
 
@@ -157,7 +175,7 @@ export default function Trip() {
           text: "OK",
           onPress: () => {
             setShowModal(MODAL.NONE);
-            getTripDetails();
+            refresh();
           },
         },
       ]);
@@ -169,6 +187,13 @@ export default function Trip() {
   }
 
   async function handleConfirmAttendance() {
+    if (!isOnline) {
+      return Alert.alert(
+        "Sem conexão",
+        "Confirmar presença requer conexão com a internet.",
+      );
+    }
+
     try {
       if (!tripParams.id || !tripParams.participants) {
         return;
@@ -205,28 +230,35 @@ export default function Trip() {
   }
 
   async function handleRemoveTrip() {
-    try {
-      Alert.alert("Remover viagem", "Tem certeza que deseja remover a viagem", [
-        {
-          text: "Não",
-          style: "cancel",
+    Alert.alert("Remover viagem", "Tem certeza que deseja remover a viagem", [
+      {
+        text: "Não",
+        style: "cancel",
+      },
+      {
+        text: "Sim",
+        onPress: async () => {
+          router.navigate("/");
         },
-        {
-          text: "Sim",
-          onPress: async () => {
-            // await tripStorage.remove();
-            router.navigate("/");
-          },
-        },
-      ]);
-    } catch (error) {}
+      },
+    ]);
   }
 
-  useEffect(() => {
-    getTripDetails();
-  }, []);
+  if (status === "loading" && !trip) {
+    return <Loading />;
+  }
 
-  if (isLoadingTrip) {
+  if (!trip) {
+    if (status === "error") {
+      return (
+        <View className="flex-1 px-5 pt-16 items-center">
+          <Text className="text-zinc-100 text-center font-semibold">
+            Não foi possível carregar a viagem. Verifique sua conexão.
+          </Text>
+        </View>
+      );
+    }
+
     return <Loading />;
   }
 
@@ -245,11 +277,15 @@ export default function Trip() {
         </TouchableOpacity>
       </Input>
 
-      {option === "activity" ? (
+      <SyncingLabel visible={status === "syncing"} />
+
+      <View className="flex-1" style={{ display: option === "activity" ? "flex" : "none" }}>
         <Activities tripDetails={trip} />
-      ) : (
+      </View>
+
+      <View className="flex-1" style={{ display: option === "details" ? "flex" : "none" }}>
         <Details tripId={trip.id} />
-      )}
+      </View>
 
       <View className="w-full absolute -bottom-1 self-center justify-end pb-5 z-10 bg-zinc-950">
         <View className="w-full flex-row bg-zinc-900 p-4 rounded-lg border border-zinc-800 gap-2">
