@@ -9,15 +9,25 @@ type APIInstanceProps = AxiosInstance & {
 };
 
 const api = axios.create({
-  baseURL: "https://overscented-loamless-etha.ngrok-free.dev",
+  baseURL: "https://trichitic-presley-cloisterlike.ngrok-free.dev",
 }) as APIInstanceProps;
+
+const AUTH_PATHS = ["/travelers/auth", "/travelers/register"];
+
+function isAuthRequest(url?: string) {
+  return AUTH_PATHS.some((path) => url?.includes(path));
+}
 
 api.interceptors.request.use(
   async (config) => {
-    const { token } = await storageAuthTokenGet();
+    try {
+      const { token } = await storageAuthTokenGet();
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch {
+      // Ignore storage read errors so auth requests can still proceed.
     }
 
     return config;
@@ -31,9 +41,13 @@ api.registerInterceptTokenManager = (signOut) => {
   const interceptTokenManager = api.interceptors.response.use(
     (response) => response,
     async (requestError: AxiosError<any>) => {
-      if (requestError.response?.status === 401) {
+      const requestUrl = requestError.config?.url;
+
+      if (
+        requestError.response?.status === 401 &&
+        !isAuthRequest(requestUrl)
+      ) {
         signOut();
-        return Promise.reject(requestError);
       }
 
       if (requestError.response?.data?.message) {

@@ -8,11 +8,25 @@ export async function storageUserSave(user: UserDTO) {
 }
 
 export async function storageUserGet() {
-    const storage = await AsyncStorage.getItem(USER_STORAGE);
+    try {
+        const storage = await AsyncStorage.getItem(USER_STORAGE);
 
-    const user: UserDTO = storage ? JSON.parse(storage): {};
+        if (!storage) {
+            return null;
+        }
 
-    return user;
+        const user = JSON.parse(storage) as UserDTO;
+
+        if (!user?.id || !user?.email) {
+            await AsyncStorage.removeItem(USER_STORAGE);
+            return null;
+        }
+
+        return user;
+    } catch {
+        await AsyncStorage.removeItem(USER_STORAGE);
+        return null;
+    }
 }
 
 export async function storageUserRemove() {
