@@ -11,11 +11,20 @@ export async function storageAuthTokenSave({ token }: StorageAuthTokenProps) {
 }
 
 export async function storageAuthTokenGet() {
-    const response = await AsyncStorage.getItem(AUTH_TOKE_STORAGE);
+    try {
+        const response = await AsyncStorage.getItem(AUTH_TOKE_STORAGE);
 
-    const { token }: StorageAuthTokenProps = response ? JSON.parse(response) : {};
+        if (!response) {
+            return { token: undefined };
+        }
 
-    return { token };
+        const parsed = JSON.parse(response) as Partial<StorageAuthTokenProps>;
+
+        return { token: parsed.token };
+    } catch {
+        await AsyncStorage.removeItem(AUTH_TOKE_STORAGE);
+        return { token: undefined };
+    }
 }
 
 export async function storageAuthTokenRemove() {

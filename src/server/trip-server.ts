@@ -28,11 +28,28 @@ type TripCreate = Omit<
   emails_to_invite: string[];
 };
 
+type TripByIDResponse = Omit<TripByID, "startsAt" | "endsAt" | "createdAt" | "updatedAt"> & {
+  startsAt: string | Date;
+  endsAt: string | Date;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+function parseTripById(trip: TripByIDResponse): TripByID {
+  return {
+    ...trip,
+    startsAt: new Date(trip.startsAt),
+    endsAt: new Date(trip.endsAt),
+    createdAt: new Date(trip.createdAt),
+    updatedAt: new Date(trip.updatedAt),
+  };
+}
+
 async function getById(id: string) {
   try {
-    const { data } = await api.get<{ trip: TripByID }>(`/trips/${id}`);
+    const { data } = await api.get<{ trip: TripByIDResponse }>(`/trips/${id}`);
 
-    return data.trip;
+    return parseTripById(data.trip);
   } catch (error) {
     throw error;
   }

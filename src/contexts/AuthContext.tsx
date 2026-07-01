@@ -1,4 +1,4 @@
-import { ReactNode, createContext, useEffect, useState } from "react";
+import { ReactNode, createContext, useCallback, useEffect, useState } from "react";
 
 import { UserDTO } from "@/dtos/user-dto";
 import { api } from "@/server/api";
@@ -12,7 +12,7 @@ import {
     storageUserRemove,
     storageUserSave,
 } from "@/storage/user";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearDatabase } from "@/database/clear";
 
 export type AuthContextDataProps = {
   user: UserDTO | null;
@@ -69,20 +69,24 @@ export function AuthContextProvider({ children }: AuthContextProviderProps) {
     }
   }
 
-  async function signOut() {
+  const signOut = useCallback(async () => {
     try {
       setIsLoadingUserStorageData(true);
 
       setUser(null);
-      await storageUserRemove();
-      await storageAuthTokenRemove();
-      await AsyncStorage.clear();
+      delete api.defaults.headers.common["Authorization"];
+
+      await Promise.all([
+        clearDatabase(),
+        storageUserRemove(),
+        storageAuthTokenRemove(),
+      ]);
     } catch (error) {
-      throw error;
+      console.warn("Failed to sign out cleanly:", error);
     } finally {
       setIsLoadingUserStorageData(false);
     }
-  }
+  }, []);
 
   async function updateUserProfile(userUpdate: UserDTO) {
     try {
@@ -104,6 +108,10 @@ export function AuthContextProvider({ children }: AuthContextProviderProps) {
         await userAndTokenUpdate(userLogged, token);
       } else {
         setUser(null);
+
+        if (token || userLogged) {
+          await Promise.all([storageUserRemove(), storageAuthTokenRemove()]);
+        }
       }
     } catch (error) {
       throw error;

@@ -4,6 +4,9 @@ import { Calendar } from "@/components/calendar";
 import { Input } from "@/components/input";
 import { Loading } from "@/components/loading";
 import { Modal } from "@/components/modal";
+import { SyncingLabel } from "@/components/syncing-label";
+import { useNetwork } from "@/contexts/NetworkContext";
+import { useActivities } from "@/hooks/useActivities";
 import { activitiesServer } from "@/server/activities-server";
 import { colors } from "@/styles/colors";
 import dayjs from "dayjs";
@@ -13,7 +16,7 @@ import {
   PlusIcon,
   Tag,
 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert, Keyboard, SectionList, Text, View } from "react-native";
 import { TripData } from "./[id]";
 
@@ -27,29 +30,17 @@ enum MODAL {
   NEW_ACTIVITY = 2,
 }
 
-type TripActivities = {
-  title: {
-    dayNumber: number;
-    dayName: string;
-  };
-  data: ActivityProps[];
-};
-
 export function Activities({ tripDetails }: Props) {
-  // MODAL
+  const { isOnline } = useNetwork();
+  const { sections: tripActivities, status, refresh } = useActivities(
+    tripDetails.id,
+  );
+
   const [showModal, setShowModal] = useState(MODAL.NONE);
-
-  // LOADING
   const [isCreatingActivity, setIsCreatingActivity] = useState(false);
-  const [isLoadingActivities, setIsLoadingActivities] = useState(false);
-
-  // DATA
   const [activityTitle, setActivityTitle] = useState("");
   const [activityDate, setActivityDate] = useState("");
   const [activityHour, setActivityHour] = useState("");
-
-  // LISTS
-  const [tripActivities, setTripActivities] = useState<TripActivities[]>([]);
 
   function resetNewActivityFields() {
     setActivityTitle("");
@@ -58,6 +49,13 @@ export function Activities({ tripDetails }: Props) {
   }
 
   async function handleCreateTripACtivity() {
+    if (!isOnline) {
+      return Alert.alert(
+        "Sem conexão",
+        "Cadastrar atividades requer conexão com a internet.",
+      );
+    }
+
     try {
       if (!activityTitle || !activityDate || !activityHour) {
         Alert.alert("Cadastrar atividade", "Preencha todos os campos!");
@@ -73,7 +71,7 @@ export function Activities({ tripDetails }: Props) {
 
       Alert.alert("Nova Atividade", "Nova atividade cadastrada com sucesso!");
 
-      await getTripActivities();
+      await refresh();
 
       resetNewActivityFields();
 
@@ -85,58 +83,45 @@ export function Activities({ tripDetails }: Props) {
     }
   }
 
-  async function getTripActivities() {
-    try {
-      setIsLoadingActivities(true);
-
-      const activities = await activitiesServer.getActivitiesByTripId(
-        tripDetails.id,
-      );
-
-      const activitiesToSectionList = activities.map((dayActivity) => ({
-        title: {
-          dayNumber: dayjs(dayActivity.date).date(),
-          dayName: dayjs(dayActivity.date).format("dddd").replace("-feira", ""),
-        },
-        data: dayActivity.activities.map((activity) => ({
-          id: activity.id,
-          title: activity.title,
-          hour: dayjs(activity.occursAt).format("hh[:]mm[h]"),
-          isBefore: dayjs(activity.occursAt).isBefore(dayjs()),
-        })),
-      }));
-
-      setTripActivities(activitiesToSectionList);
-    } catch (error) {
-      console.log(error);
-    } finally {
-      setIsLoadingActivities(false);
-    }
-  }
-
-  useEffect(() => {
-    getTripActivities();
-  }, []);
+  const isInitialLoading = status === "loading" && tripActivities.length === 0;
 
   return (
     <View className="flex-1">
       <View className="w-fll flex-row mt-5 mb-6 items-center">
-        <Text className="text-zinc-50 text-2xl font-semibold flex-1">
-          Atividades
-        </Text>
+        <View className="flex-1">
+          <Text className="text-zinc-50 text-2xl font-semibold">
+            Atividades
+          </Text>
+          <SyncingLabel visible={status === "syncing"} />
+        </View>
 
-        <Button onPress={() => setShowModal(MODAL.NEW_ACTIVITY)}>
+        <Button
+          onPress={() => {
+            if (!isOnline) {
+              return Alert.alert(
+                "Sem conexão",
+                "Cadastrar atividades requer conexão com a internet.",
+              );
+            }
+            setShowModal(MODAL.NEW_ACTIVITY);
+          }}
+          disabled={!isOnline}
+        >
           <PlusIcon color={colors.lime[950]} size={20} />
           <Button.Title>Nova atividade</Button.Title>
         </Button>
       </View>
 
-      {isLoadingActivities ? (
+      {isInitialLoading ? (
         <Loading />
+      ) : status === "error" ? (
+        <Text className="text-zinc-400 font-regular text-base">
+          Não foi possível carregar as atividades. Verifique sua conexão.
+        </Text>
       ) : (
         <SectionList
           sections={tripActivities}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item: ActivityProps) => item.id}
           renderItem={({ item }) => <Activity data={item} />}
           renderSectionHeader={({ section }) => (
             <View className="w-full">
