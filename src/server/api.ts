@@ -8,8 +8,12 @@ type APIInstanceProps = AxiosInstance & {
   registerInterceptTokenManager: (signOut: SignOut) => () => void;
 };
 
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ??
+  "https://trichitic-presley-cloisterlike.ngrok-free.dev";
+
 const api = axios.create({
-  baseURL: "https://trichitic-presley-cloisterlike.ngrok-free.dev",
+  baseURL: API_URL,
 }) as APIInstanceProps;
 
 const AUTH_PATHS = ["/travelers/auth", "/travelers/register"];
@@ -40,7 +44,7 @@ api.interceptors.request.use(
 api.registerInterceptTokenManager = (signOut) => {
   const interceptTokenManager = api.interceptors.response.use(
     (response) => response,
-    async (requestError: AxiosError<any>) => {
+    async (requestError: AxiosError<{ message?: string }>) => {
       const requestUrl = requestError.config?.url;
 
       if (

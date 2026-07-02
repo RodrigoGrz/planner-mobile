@@ -1,32 +1,73 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 
-import { AUTH_TOKE_STORAGE } from './config';
+import { AUTH_TOKEN_STORAGE, AUTH_TOKE_STORAGE } from "./config";
 
 type StorageAuthTokenProps = {
-    token: string;
+  token: string;
+};
+
+let migrationDone = false;
+
+async function migrateTokenFromAsyncStorage() {
+  if (migrationDone) {
+    return;
+  }
+
+  migrationDone = true;
+
+  try {
+    const legacy = await AsyncStorage.getItem(AUTH_TOKE_STORAGE);
+
+    if (!legacy) {
+      return;
+    }
+
+    const parsed = JSON.parse(legacy) as Partial<StorageAuthTokenProps>;
+
+    if (parsed.token) {
+      await SecureStore.setItemAsync(AUTH_TOKEN_STORAGE, parsed.token);
+    }
+
+    await AsyncStorage.removeItem(AUTH_TOKE_STORAGE);
+  } catch {
+    await AsyncStorage.removeItem(AUTH_TOKE_STORAGE);
+  }
 }
 
 export async function storageAuthTokenSave({ token }: StorageAuthTokenProps) {
-    await AsyncStorage.setItem(AUTH_TOKE_STORAGE, JSON.stringify({ token }));
+  await migrateTokenFromAsyncStorage();
+  await SecureStore.setItemAsync(AUTH_TOKEN_STORAGE, token);
 }
 
 export async function storageAuthTokenGet() {
-    try {
-        const response = await AsyncStorage.getItem(AUTH_TOKE_STORAGE);
+  await migrateTokenFromAsyncStorage();
 
-        if (!response) {
-            return { token: undefined };
-        }
+  try {
+    const token = await SecureStore.getItemAsync(AUTH_TOKEN_STORAGE);
 
-        const parsed = JSON.parse(response) as Partial<StorageAuthTokenProps>;
-
-        return { token: parsed.token };
-    } catch {
-        await AsyncStorage.removeItem(AUTH_TOKE_STORAGE);
-        return { token: undefined };
+    if (!token) {
+      return { token: undefined };
     }
+
+    return { token };
+  } catch {
+    try {
+      await SecureStore.deleteItemAsync(AUTH_TOKEN_STORAGE);
+    } catch {
+      // Ignore cleanup errors for corrupted secure storage entries.
+    }
+
+    return { token: undefined };
+  }
 }
 
 export async function storageAuthTokenRemove() {
-    await AsyncStorage.removeItem(AUTH_TOKE_STORAGE);
+  try {
+    await SecureStore.deleteItemAsync(AUTH_TOKEN_STORAGE);
+  } catch {
+    // Ignore if the secure entry was never saved.
+  }
+
+  await AsyncStorage.removeItem(AUTH_TOKE_STORAGE);
 }
