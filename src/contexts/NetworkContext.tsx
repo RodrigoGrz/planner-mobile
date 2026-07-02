@@ -12,6 +12,7 @@ import {
 type NetworkContextData = {
   isOnline: boolean;
   isInternetReachable: boolean | null;
+  reconnectSignal: number;
   registerReconnectCallback: (callback: () => void) => () => void;
 };
 
@@ -26,6 +27,7 @@ export function NetworkProvider({ children }: NetworkProviderProps) {
   const [isInternetReachable, setIsInternetReachable] = useState<boolean | null>(
     true,
   );
+  const [reconnectSignal, setReconnectSignal] = useState(0);
   const reconnectCallbacks = useRef<Set<() => void>>(new Set());
   const wasOffline = useRef(false);
 
@@ -38,6 +40,7 @@ export function NetworkProvider({ children }: NetworkProviderProps) {
   }, []);
 
   const notifyReconnect = useCallback(() => {
+    setReconnectSignal((current) => current + 1);
     reconnectCallbacks.current.forEach((callback) => {
       callback();
     });
@@ -75,7 +78,7 @@ export function NetworkProvider({ children }: NetworkProviderProps) {
 
   return (
     <NetworkContext.Provider
-      value={{ isOnline, isInternetReachable, registerReconnectCallback }}
+      value={{ isOnline, isInternetReachable, reconnectSignal, registerReconnectCallback }}
     >
       {children}
     </NetworkContext.Provider>

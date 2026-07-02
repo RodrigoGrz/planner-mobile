@@ -1,6 +1,18 @@
 type TripSyncListener = () => void;
 
 const listeners = new Map<string, Set<TripSyncListener>>();
+const pendingTripIds = new Set<string>();
+let flushScheduled = false;
+
+function flushNotifications() {
+  flushScheduled = false;
+  const tripIds = Array.from(pendingTripIds);
+  pendingTripIds.clear();
+
+  for (const tripId of tripIds) {
+    listeners.get(tripId)?.forEach((listener) => listener());
+  }
+}
 
 export function subscribeTripDataUpdated(
   tripId: string,
@@ -18,5 +30,10 @@ export function subscribeTripDataUpdated(
 }
 
 export function notifyTripDataUpdated(tripId: string) {
-  listeners.get(tripId)?.forEach((listener) => listener());
+  pendingTripIds.add(tripId);
+
+  if (!flushScheduled) {
+    flushScheduled = true;
+    queueMicrotask(flushNotifications);
+  }
 }
