@@ -1,5 +1,6 @@
 import { getDatabase } from "@/database/database";
 import { setSyncMetadata } from "@/database/sync-metadata";
+import { resolveLocalTripId } from "@/repositories/trip-repository";
 import { Participant } from "@/server/participants-server";
 
 type ParticipantRow = {
@@ -21,10 +22,11 @@ function mapParticipantRow(row: ParticipantRow): Participant {
 
 export async function getParticipantsByTripId(tripId: string) {
   const db = await getDatabase();
+  const localTripId = await resolveLocalTripId(tripId);
 
   const rows = await db.getAllAsync<ParticipantRow>(
     "SELECT * FROM participants WHERE trip_id = ? ORDER BY name ASC",
-    [tripId],
+    [localTripId],
   );
 
   return rows.map(mapParticipantRow);
@@ -35,9 +37,10 @@ export async function replaceParticipantsByTripId(
   participants: Participant[],
 ) {
   const db = await getDatabase();
+  const localTripId = await resolveLocalTripId(tripId);
 
   await db.withTransactionAsync(async () => {
-    await db.runAsync("DELETE FROM participants WHERE trip_id = ?", [tripId]);
+    await db.runAsync("DELETE FROM participants WHERE trip_id = ?", [localTripId]);
 
     for (const participant of participants) {
       await db.runAsync(
@@ -45,7 +48,7 @@ export async function replaceParticipantsByTripId(
          VALUES (?, ?, ?, ?, ?)`,
         [
           participant.id,
-          tripId,
+          localTripId,
           participant.name,
           participant.email,
           participant.isConfirmed ? 1 : 0,
@@ -54,5 +57,5 @@ export async function replaceParticipantsByTripId(
     }
   });
 
-  await setSyncMetadata(`participants:${tripId}`);
+  await setSyncMetadata(`participants:${localTripId}`);
 }
