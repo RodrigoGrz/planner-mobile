@@ -26,10 +26,9 @@ import {
 import { Toggle } from "@/components/toggle";
 import { useAuth } from "@/hooks/useAuth";
 import { useNetwork } from "@/contexts/NetworkContext";
-import { seedTripDetail } from "@/repositories/trip-repository";
-import { syncTravelerTrips, syncTripDetail } from "@/services/sync-service";
-import { tripServer } from "@/server/trip-server";
+import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
+import { toApiDate } from "@/utils/to-api-date";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
 import { calendarPermission } from "@/utils/toggle/calendar-permission";
 import { syncTripWithCalendar } from "@/utils/toggle/calendar-sync";
@@ -87,13 +86,6 @@ export default function Create() {
 
     if (stepForm === StepForm.TRIP_DETAILS) {
       return setStepForm(StepForm.ADD_EMAILS);
-    }
-
-    if (!isOnline) {
-      return Alert.alert(
-        "Sem conexão",
-        "Criar viagem requer conexão com a internet.",
-      );
     }
 
     Alert.alert("Nova viagem", "Confirmar viagem?", [
@@ -157,52 +149,20 @@ export default function Create() {
     setIsEnabled((prev) => !prev);
   }
 
-  async function saveTrip(tripId: string) {
-    if (!selectedDates.startsAt || !selectedDates.endsAt) {
-      return;
-    }
-
-    await seedTripDetail({
-      id: tripId,
-      destination,
-      startsAt: dayjs(selectedDates.startsAt.dateString).toISOString(),
-      endsAt: dayjs(selectedDates.endsAt.dateString).toISOString(),
-      ownerName: user?.name ?? "",
-    });
-
-    try {
-      await syncTripDetail(tripId);
-      await syncTravelerTrips();
-    } catch (error) {
-      console.warn("Failed to sync trip after creation:", error);
-    }
-
-    router.navigate(`/trip/${tripId}`);
-  }
-
   async function createTrip() {
-    if (!isOnline) {
-      return Alert.alert(
-        "Sem conexão",
-        "Criar viagem requer conexão com a internet.",
-      );
-    }
-
     try {
       setIsCreatingTrip(true);
 
-      const newTrip = await tripServer.create({
+      const { localId } = await mutationService.createTrip({
         destination,
-        startsAt: dayjs(selectedDates.startsAt?.dateString).toISOString(),
-        endsAt: dayjs(selectedDates.endsAt?.dateString).toISOString(),
-        emails_to_invite: emailsToInvite,
+        startsAt: toApiDate(selectedDates.startsAt?.dateString ?? ""),
+        endsAt: toApiDate(selectedDates.endsAt?.dateString ?? ""),
+        emailsToInvite: emailsToInvite,
+        ownerName: user?.name ?? "",
+        coverImageUri: selectedImage,
       });
 
-      if (selectedImage) {
-        await tripServer.uploadTripImage(newTrip.tripId, selectedImage);
-      }
-
-      if (isEnabled && selectedDates.startsAt && selectedDates.endsAt) {
+      if (isOnline && isEnabled && selectedDates.startsAt && selectedDates.endsAt) {
         try {
           await syncTripWithCalendar({
             destination,
@@ -217,12 +177,18 @@ export default function Create() {
         }
       }
 
-      Alert.alert("Nova viagem", "Viagem criada com sucesso!", [
-        {
-          text: "OK. Continuar.",
-          onPress: () => saveTrip(newTrip.tripId),
-        },
-      ]);
+      Alert.alert(
+        "Nova viagem",
+        isOnline
+          ? "Viagem criada com sucesso!"
+          : "Viagem salva offline. Será sincronizada quando houver conexão.",
+        [
+          {
+            text: "OK. Continuar.",
+            onPress: () => router.navigate(`/trip/${localId}`),
+          },
+        ],
+      );
     } catch {
       Alert.alert("Erro", "Não foi possível criar a viagem. Tente novamente.");
     } finally {

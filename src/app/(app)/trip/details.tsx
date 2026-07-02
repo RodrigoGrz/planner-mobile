@@ -6,8 +6,9 @@ import { Participant, ParticipantProps } from "@/components/participant";
 import { TripLink, TripLinkProps } from "@/components/tripLink";
 import { useNetwork } from "@/contexts/NetworkContext";
 import { useTripDetails } from "@/hooks/useTripDetails";
-import { linksServer } from "@/server/links-server";
+import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
+import { logger } from "@/utils/logger";
 import { validateInput } from "@/utils/validateInput";
 import { Plus } from "lucide-react-native";
 import { useState } from "react";
@@ -32,13 +33,6 @@ export function Details({ tripId }: DetailsProps) {
   }
 
   async function handleCreateTripLink() {
-    if (!isOnline) {
-      return Alert.alert(
-        "Sem conexão",
-        "Cadastrar links requer conexão com a internet.",
-      );
-    }
-
     try {
       if (!linkTitle.trim()) {
         return Alert.alert("Link", "Informe um título para o link");
@@ -50,13 +44,18 @@ export function Details({ tripId }: DetailsProps) {
 
       setIsCreatingLinkTrip(true);
 
-      await linksServer.create({
+      await mutationService.createLink({
         tripId,
         title: linkTitle,
         url: linkURL,
       });
 
-      Alert.alert("Link", "Link criado com sucesso!");
+      Alert.alert(
+        "Link",
+        isOnline
+          ? "Link criado com sucesso!"
+          : "Link salvo offline. Será sincronizado quando houver conexão.",
+      );
 
       resetNewLinkFields();
 
@@ -64,7 +63,7 @@ export function Details({ tripId }: DetailsProps) {
 
       setShowNewLinkModal(false);
     } catch (error) {
-      console.log(error);
+      logger.error(error);
     } finally {
       setIsCreatingLinkTrip(false);
     }
@@ -99,16 +98,7 @@ export function Details({ tripId }: DetailsProps) {
 
         <Button
           variant="secondary"
-          disabled={!isOnline}
-          onPress={() => {
-            if (!isOnline) {
-              return Alert.alert(
-                "Sem conexão",
-                "Cadastrar links requer conexão com a internet.",
-              );
-            }
-            setShowNewLinkModal(true);
-          }}
+          onPress={() => setShowNewLinkModal(true)}
         >
           <Plus color={colors.zinc[200]} size={20} />
           <Button.Title>Cadastrar novo link</Button.Title>
