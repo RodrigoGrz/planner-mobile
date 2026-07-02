@@ -7,8 +7,10 @@ import { Modal } from "@/components/modal";
 import { SyncingLabel } from "@/components/syncing-label";
 import { useNetwork } from "@/contexts/NetworkContext";
 import { useActivities } from "@/hooks/useActivities";
-import { activitiesServer } from "@/server/activities-server";
+import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
+import { logger } from "@/utils/logger";
+import { toApiDate } from "@/utils/to-api-date";
 import dayjs from "dayjs";
 import {
   Clock,
@@ -49,27 +51,28 @@ export function Activities({ tripDetails }: Props) {
   }
 
   async function handleCreateTripACtivity() {
-    if (!isOnline) {
-      return Alert.alert(
-        "Sem conexão",
-        "Cadastrar atividades requer conexão com a internet.",
-      );
-    }
-
     try {
       if (!activityTitle || !activityDate || !activityHour) {
         Alert.alert("Cadastrar atividade", "Preencha todos os campos!");
+        return;
       }
 
       setIsCreatingActivity(true);
 
-      await activitiesServer.create({
+      await mutationService.createActivity({
         tripId: tripDetails.id,
-        occursAt: dayjs(activityDate).add(Number(activityHour), "h").toString(),
+        occursAt: toApiDate(
+          dayjs(activityDate).add(Number(activityHour), "h"),
+        ),
         title: activityTitle,
       });
 
-      Alert.alert("Nova Atividade", "Nova atividade cadastrada com sucesso!");
+      Alert.alert(
+        "Nova Atividade",
+        isOnline
+          ? "Nova atividade cadastrada com sucesso!"
+          : "Atividade salva offline. Será sincronizada quando houver conexão.",
+      );
 
       await refresh();
 
@@ -77,7 +80,7 @@ export function Activities({ tripDetails }: Props) {
 
       setShowModal(MODAL.NONE);
     } catch (error) {
-      console.log(error);
+      logger.error(error);
     } finally {
       setIsCreatingActivity(false);
     }
@@ -96,16 +99,7 @@ export function Activities({ tripDetails }: Props) {
         </View>
 
         <Button
-          onPress={() => {
-            if (!isOnline) {
-              return Alert.alert(
-                "Sem conexão",
-                "Cadastrar atividades requer conexão com a internet.",
-              );
-            }
-            setShowModal(MODAL.NEW_ACTIVITY);
-          }}
-          disabled={!isOnline}
+          onPress={() => setShowModal(MODAL.NEW_ACTIVITY)}
         >
           <PlusIcon color={colors.lime[950]} size={20} />
           <Button.Title>Nova atividade</Button.Title>

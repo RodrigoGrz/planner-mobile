@@ -1,49 +1,40 @@
+import { useNetwork } from "@/contexts/NetworkContext";
+import { useLoadGeneration } from "@/hooks/useLoadGeneration";
 import { hasSynced } from "@/database/has-synced";
-import { useIsOnlineRef } from "@/hooks/useIsOnlineRef";
 import { getTripById } from "@/repositories/trip-repository";
-import { syncTripDetail } from "@/services/sync-service";
 import { subscribeTripDataUpdated } from "@/services/trip-sync-events";
 import { TripByID } from "@/server/trip-server";
 import { DataStatus } from "@/types/data-status";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export function useTrip(tripId: string | undefined) {
-  const isOnlineRef = useIsOnlineRef();
+  const { isOnline } = useNetwork();
+  const { beginLoad, isCurrentLoad } = useLoadGeneration();
   const [trip, setTrip] = useState<TripByID | null>(null);
   const [status, setStatus] = useState<DataStatus>("loading");
   const hasCacheRef = useRef(false);
 
   const loadLocal = useCallback(async () => {
     if (!tripId) {
-      return false;
+      return { hasCache: false, stale: false };
     }
 
+    const generation = beginLoad();
     const [localTrip, synced] = await Promise.all([
       getTripById(tripId),
       hasSynced(`trip:${tripId}`),
     ]);
+    const hasCache = synced || localTrip !== null;
+
+    if (!isCurrentLoad(generation)) {
+      return { hasCache: hasCacheRef.current, stale: true };
+    }
 
     setTrip(localTrip);
-    hasCacheRef.current = synced || localTrip !== null;
+    hasCacheRef.current = hasCache;
 
-    return hasCacheRef.current;
-  }, [tripId]);
-
-  const syncFromApi = useCallback(async () => {
-    if (!tripId) {
-      setStatus("error");
-      return;
-    }
-
-    try {
-      setStatus(hasCacheRef.current ? "syncing" : "loading");
-      await syncTripDetail(tripId);
-      await loadLocal();
-      setStatus("ready");
-    } catch {
-      setStatus(hasCacheRef.current ? "offline" : "error");
-    }
-  }, [tripId, loadLocal]);
+    return { hasCache, stale: false };
+  }, [tripId, beginLoad, isCurrentLoad]);
 
   const refresh = useCallback(async () => {
     if (!tripId) {
@@ -51,18 +42,22 @@ export function useTrip(tripId: string | undefined) {
       return;
     }
 
-    const hasCache = await loadLocal();
+    const { hasCache, stale } = await loadLocal();
 
-    if (!isOnlineRef.current && hasCache) {
-      setStatus("offline");
+    if (stale) {
       return;
     }
 
-    await syncFromApi();
-  }, [tripId, isOnlineRef, loadLocal, syncFromApi]);
+    if (!isOnline) {
+      setStatus(hasCache ? "offline" : "error");
+      return;
+    }
+
+    setStatus("ready");
+  }, [tripId, isOnline, loadLocal]);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [tripId, refresh]);
 
   useEffect(() => {
@@ -71,9 +66,9 @@ export function useTrip(tripId: string | undefined) {
     }
 
     return subscribeTripDataUpdated(tripId, () => {
-      void loadLocal();
+      void refresh();
     });
-  }, [tripId, loadLocal]);
+  }, [tripId, refresh]);
 
   return { trip, status, refresh };
 }

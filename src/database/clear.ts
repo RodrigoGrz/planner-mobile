@@ -5,14 +5,13 @@ export async function clearDatabase() {
     const db = await getDatabase();
 
     await db.withTransactionAsync(async () => {
-      await db.execAsync(`
-        DELETE FROM participants;
-        DELETE FROM links;
-        DELETE FROM activities;
-        DELETE FROM traveler_trips;
-        DELETE FROM trips;
-        DELETE FROM sync_metadata;
-      `);
+      await db.runAsync("DELETE FROM participants");
+      await db.runAsync("DELETE FROM links");
+      await db.runAsync("DELETE FROM activities");
+      await db.runAsync("DELETE FROM traveler_trips");
+      await db.runAsync("DELETE FROM trips");
+      await db.runAsync("DELETE FROM sync_queue");
+      await db.runAsync("DELETE FROM sync_metadata");
     });
   } catch (error) {
     console.warn("Failed to clear local database:", error);

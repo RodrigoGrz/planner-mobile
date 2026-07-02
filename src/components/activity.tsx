@@ -4,11 +4,14 @@ import { Text, View } from "react-native";
 import { colors } from "@/styles/colors";
 import clsx from "clsx";
 
+import { EntitySyncStatus } from "@/types/sync";
+
 export type ActivityProps = {
   id: string;
   title: string;
   hour: string;
   isBefore: boolean;
+  syncStatus?: EntitySyncStatus;
 };
 
 type Props = {
@@ -29,9 +32,16 @@ export function Activity({ data }: Props) {
         <CircleDashed testID="icon-dashed" color={colors.zinc[400]} size={20} />
       )}
 
-      <Text className="text-zinc-100 font-regular text-base flex-1">
-        {data.title}
-      </Text>
+      <View className="flex-1">
+        <Text className="text-zinc-100 font-regular text-base">{data.title}</Text>
+        {data.syncStatus && data.syncStatus !== "synced" ? (
+          <Text className="text-amber-400 font-regular text-xs mt-1">
+            {data.syncStatus === "failed"
+              ? "Falha ao sincronizar"
+              : "Aguardando sincronização"}
+          </Text>
+        ) : null}
+      </View>
 
       <Text className="text-zinc-400 font-regular text-sm">{data.hour}</Text>
     </View>

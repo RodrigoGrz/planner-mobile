@@ -1,8 +1,8 @@
 import { syncTravelerTrips } from "@/services/sync-service";
 import { tripServer } from "@/server/trip-server";
 import {
+  mergeTravelerTripsFromServer,
   setNextTripId,
-  upsertTravelerTrips,
 } from "@/repositories/trip-repository";
 
 jest.mock("@/server/trip-server", () => ({
@@ -13,7 +13,7 @@ jest.mock("@/server/trip-server", () => ({
 }));
 
 jest.mock("@/repositories/trip-repository", () => ({
-  upsertTravelerTrips: jest.fn(),
+  mergeTravelerTripsFromServer: jest.fn(),
   setNextTripId: jest.fn(),
 }));
 
@@ -45,7 +45,7 @@ describe("sync-service", () => {
 
     const result = await syncTravelerTrips();
 
-    expect(upsertTravelerTrips).toHaveBeenCalledWith(trips);
+    expect(mergeTravelerTripsFromServer).toHaveBeenCalledWith(trips);
     expect(setNextTripId).toHaveBeenCalledWith("t1");
     expect(result.trips).toEqual(trips);
     expect(result.nextTrip).toEqual(trips[0]);

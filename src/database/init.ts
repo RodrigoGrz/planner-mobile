@@ -1,5 +1,6 @@
 import { getDatabase } from "./database";
 import { runMigrations } from "./migrations";
+import { resetStaleSyncingItems } from "@/repositories/sync-queue-repository";
 
 let initialized = false;
 
@@ -10,5 +11,6 @@ export async function initDatabase() {
 
   const db = await getDatabase();
   await runMigrations(db);
+  await resetStaleSyncingItems();
   initialized = true;
 }

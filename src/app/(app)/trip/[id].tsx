@@ -13,9 +13,11 @@ import { SyncingLabel } from "@/components/syncing-label";
 import { useNetwork } from "@/contexts/NetworkContext";
 import { useTripScreenSync } from "@/hooks/useTripScreenSync";
 import { useTrip } from "@/hooks/useTrip";
+import { mutationService } from "@/services/mutation-service";
 import { participantsServer } from "@/server/participants-server";
-import { tripServer } from "@/server/trip-server";
 import { colors } from "@/styles/colors";
+import { logger } from "@/utils/logger";
+import { toApiDate } from "@/utils/to-api-date";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
 import { validateInput } from "@/utils/validateInput";
 import {
@@ -142,13 +144,6 @@ export default function Trip() {
   }
 
   async function handleUpdateTrip() {
-    if (!isOnline) {
-      return Alert.alert(
-        "Sem conexão",
-        "Atualizar viagem requer conexão com a internet.",
-      );
-    }
-
     try {
       if (!tripParams.id || !trip) {
         return;
@@ -163,24 +158,30 @@ export default function Trip() {
 
       setIsUpdatingTrip(true);
 
-      await tripServer.update({
+      await mutationService.updateTrip({
         tripId: trip.id,
         destination,
-        startsAt: dayjs(selectedDates.startsAt.dateString).toString(),
-        endsAt: dayjs(selectedDates.endsAt.dateString).toString(),
+        startsAt: toApiDate(selectedDates.startsAt.dateString),
+        endsAt: toApiDate(selectedDates.endsAt.dateString),
       });
 
-      Alert.alert("Atualizar viagem", "Viagem atualizada com sucesso!", [
-        {
-          text: "OK",
-          onPress: () => {
-            setShowModal(MODAL.NONE);
-            refresh();
+      Alert.alert(
+        "Atualizar viagem",
+        isOnline
+          ? "Viagem atualizada com sucesso!"
+          : "Alterações salvas offline. Serão sincronizadas quando houver conexão.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setShowModal(MODAL.NONE);
+              refresh();
+            },
           },
-        },
-      ]);
+        ],
+      );
     } catch (error) {
-      console.log(error);
+      logger.error(error);
     } finally {
       setIsUpdatingTrip(false);
     }
@@ -222,7 +223,7 @@ export default function Trip() {
 
       setShowModal(MODAL.NONE);
     } catch (error) {
-      console.log(error);
+      logger.error(error);
       Alert.alert("Confirmação", "Não foi possível confirmar!");
     } finally {
       setIsConfirmingAttendance(false);

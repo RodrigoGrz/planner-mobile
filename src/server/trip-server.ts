@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { logger } from "@/utils/logger";
 
 export type TripDetails = {
   participantId: string;
@@ -71,7 +72,7 @@ async function create({
 
     return data;
   } catch (error) {
-    console.log(error);
+    logger.error(error);
     throw error;
   }
 }
