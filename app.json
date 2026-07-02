@@ -46,7 +46,8 @@
           "calendarPermission": "O aplicativo precisa acessar seu calendário."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
