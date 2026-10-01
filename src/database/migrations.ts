@@ -1,7 +1,7 @@
 import { SQLiteDatabase } from "expo-sqlite";
 
 const SCHEMA_VERSION_KEY = "schema_version";
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 
 const TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS trips (
@@ -178,6 +178,14 @@ async function migrateToV3(db: SQLiteDatabase) {
   await addColumnIfMissing(db, "sync_queue", "next_retry_at TEXT");
 }
 
+async function migrateToV4(db: SQLiteDatabase) {
+  await db.execAsync(`
+    DELETE FROM activities WHERE id IS NULL;
+    DELETE FROM links WHERE id IS NULL;
+    DELETE FROM sync_queue WHERE entity_id IS NULL;
+  `);
+}
+
 export async function runMigrations(db: SQLiteDatabase) {
   await db.execAsync("PRAGMA journal_mode = WAL;");
   await db.execAsync("PRAGMA foreign_keys = ON;");
@@ -192,6 +200,11 @@ export async function runMigrations(db: SQLiteDatabase) {
 
   if (currentVersion < 3) {
     await migrateToV3(db);
+    await setSchemaVersion(db, 3);
+  }
+
+  if (currentVersion < 4) {
+    await migrateToV4(db);
     await setSchemaVersion(db, CURRENT_SCHEMA_VERSION);
   }
 }
