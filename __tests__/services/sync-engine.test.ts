@@ -12,12 +12,15 @@ import {
   markQueueItemFailed,
   removeQueueItems,
 } from "@/repositories/sync-queue-repository";
+import { overwriteTripFromServer } from "@/repositories/trip-repository";
 import { activitiesServer } from "@/server/activities-server";
 import { linksServer } from "@/server/links-server";
+import { tripServer } from "@/server/trip-server";
 import { processSyncQueue } from "@/services/sync-engine";
 import { syncActivities } from "@/services/sync-service";
 import { notifyTripDataUpdated } from "@/services/trip-sync-events";
 import { SyncQueueItem } from "@/types/sync";
+import { AppError } from "@/utils/app-error";
 
 jest.mock("@/repositories/activity-repository", () => ({
   getStoredActivityRemoteId: jest.fn(() => Promise.resolve(null)),
@@ -72,7 +75,10 @@ jest.mock("@/server/links-server", () => ({
 }));
 
 jest.mock("@/server/trip-server", () => ({
-  tripServer: {},
+  tripServer: {
+    update: jest.fn(),
+    getById: jest.fn(),
+  },
 }));
 
 jest.mock("@/services/sync-service", () => ({
@@ -225,6 +231,74 @@ describe("sync-engine", () => {
     await flushPromises();
 
     expect(syncActivities).toHaveBeenCalledWith("trip-1");
+  });
+
+  it("should treat a 401 AppError as an auth error and stop the queue", async () => {
+    (getQueueItemsOrdered as jest.Mock)
+      .mockResolvedValueOnce([activityItem, linkItem])
+      .mockResolvedValue([]);
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("Token inválido", { status: 401 }),
+    );
+
+    await processSyncQueue();
+
+    expect(markQueueItemFailed).toHaveBeenCalledWith(
+      "queue-1",
+      "AUTH_ERROR",
+      1,
+      null,
+    );
+    expect(markActivitySyncFailed).toHaveBeenCalledWith(
+      "activity-local-1",
+      "AUTH_ERROR",
+    );
+    expect(linksServer.create).not.toHaveBeenCalled();
+  });
+
+  it("should reload the trip from the server on a 409 AppError", async () => {
+    const serverTrip = { id: "trip-remote-1", destination: "Paris" };
+
+    queueOnce(
+      makeQueueItem({
+        id: "queue-3",
+        entityType: "trip",
+        operation: "update",
+        entityId: "trip-local-1",
+        payload: {
+          destination: "Paris",
+          startsAt: "2026-10-01T00:00:00.000Z",
+          endsAt: "2026-10-05T00:00:00.000Z",
+        },
+      }),
+    );
+    (tripServer.update as jest.Mock).mockRejectedValue(
+      new AppError("Viagem em conflito", { status: 409 }),
+    );
+    (tripServer.getById as jest.Mock).mockResolvedValue(serverTrip);
+
+    await processSyncQueue();
+
+    expect(tripServer.getById).toHaveBeenCalledWith("trip-remote-1");
+    expect(overwriteTripFromServer).toHaveBeenCalledWith(serverTrip);
+    expect(removeQueueItems).toHaveBeenCalledWith(["queue-3"]);
+    expect(markQueueItemFailed).not.toHaveBeenCalled();
+  });
+
+  it("should store the api message as the queue error", async () => {
+    queueOnce(activityItem);
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("Viagem não encontrada", { status: 404 }),
+    );
+
+    await processSyncQueue();
+
+    expect(markQueueItemFailed).toHaveBeenCalledWith(
+      "queue-1",
+      "Viagem não encontrada",
+      1,
+      expect.any(String),
+    );
   });
 
   it("should not schedule a trip pull when the api returns the id", async () => {

@@ -22,16 +22,21 @@ function isAuthRequest(url?: string) {
   return AUTH_PATHS.some((path) => url?.includes(path));
 }
 
+async function readStoredToken() {
+  try {
+    const { token } = await storageAuthTokenGet();
+    return token;
+  } catch {
+    return null;
+  }
+}
+
 api.interceptors.request.use(
   async (config) => {
-    try {
-      const { token } = await storageAuthTokenGet();
+    const token = await readStoredToken();
 
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch {
-      // Ignore storage read errors so auth requests can still proceed.
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
     return config;
@@ -41,29 +46,57 @@ api.interceptors.request.use(
   },
 );
 
+const NETWORK_ERROR_MESSAGE = "Sem conexão com o servidor.";
+
+let unauthorizedHandler: SignOut | null = null;
+
+function readApiMessage(data: unknown) {
+  if (typeof data !== "object" || data === null || !("message" in data)) {
+    return null;
+  }
+
+  const { message } = data as { message: unknown };
+
+  return typeof message === "string" && message.length > 0 ? message : null;
+}
+
+function toAppError(requestError: AxiosError) {
+  const { response } = requestError;
+
+  if (!response) {
+    return new AppError(NETWORK_ERROR_MESSAGE, {
+      code: "NETWORK",
+      cause: requestError,
+    });
+  }
+
+  return new AppError(readApiMessage(response.data) ?? requestError.message, {
+    status: response.status,
+    cause: requestError,
+  });
+}
+
+api.interceptors.response.use(
+  (response) => response,
+  (requestError: AxiosError) => {
+    if (
+      requestError.response?.status === 401 &&
+      !isAuthRequest(requestError.config?.url)
+    ) {
+      unauthorizedHandler?.();
+    }
+
+    return Promise.reject(toAppError(requestError));
+  },
+);
+
 api.registerInterceptTokenManager = (signOut) => {
-  const interceptTokenManager = api.interceptors.response.use(
-    (response) => response,
-    async (requestError: AxiosError<{ message?: string }>) => {
-      const requestUrl = requestError.config?.url;
-
-      if (
-        requestError.response?.status === 401 &&
-        !isAuthRequest(requestUrl)
-      ) {
-        signOut();
-      }
-
-      if (requestError.response?.data?.message) {
-        return Promise.reject(new AppError(requestError.response.data.message));
-      }
-
-      return Promise.reject(requestError);
-    },
-  );
+  unauthorizedHandler = signOut;
 
   return () => {
-    api.interceptors.response.eject(interceptTokenManager);
+    if (unauthorizedHandler === signOut) {
+      unauthorizedHandler = null;
+    }
   };
 };
 
