@@ -5,6 +5,7 @@ import { SyncingLabel } from "@/components/syncing-label";
 import { Participant, ParticipantProps } from "@/components/participant";
 import { TripLink, TripLinkProps } from "@/components/tripLink";
 import { useNetwork } from "@/contexts/NetworkContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useTripDetails } from "@/hooks/useTripDetails";
 import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
@@ -12,7 +13,7 @@ import { logger } from "@/utils/logger";
 import { validateInput } from "@/utils/validateInput";
 import { Plus } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, FlatList, Text, View } from "react-native";
+import { FlatList, Text, View } from "react-native";
 
 interface DetailsProps {
   tripId: string;
@@ -21,6 +22,7 @@ interface DetailsProps {
 export function Details({ tripId }: DetailsProps) {
   const { isOnline } = useNetwork();
   const { links, participants, status, refresh } = useTripDetails(tripId);
+  const { showError, showErrorMessage, showSuccess, showInfo } = useToast();
 
   const [showNewLinkModal, setShowNewLinkModal] = useState(false);
   const [isCreatingLinkTrip, setIsCreatingLinkTrip] = useState(false);
@@ -35,11 +37,11 @@ export function Details({ tripId }: DetailsProps) {
   async function handleCreateTripLink() {
     try {
       if (!linkTitle.trim()) {
-        return Alert.alert("Link", "Informe um título para o link");
+        return showErrorMessage("Informe um título para o link.");
       }
 
       if (!validateInput.url(linkURL.trim())) {
-        return Alert.alert("Link", "Link inválido!");
+        return showErrorMessage("Link inválido.");
       }
 
       setIsCreatingLinkTrip(true);
@@ -50,12 +52,11 @@ export function Details({ tripId }: DetailsProps) {
         url: linkURL,
       });
 
-      Alert.alert(
-        "Link",
-        isOnline
-          ? "Link criado com sucesso!"
-          : "Link salvo offline. Será sincronizado quando houver conexão.",
-      );
+      if (isOnline) {
+        showSuccess("Link criado com sucesso!");
+      } else {
+        showInfo("Link salvo offline. Será sincronizado quando houver conexão.");
+      }
 
       resetNewLinkFields();
 
@@ -64,6 +65,7 @@ export function Details({ tripId }: DetailsProps) {
       setShowNewLinkModal(false);
     } catch (error) {
       logger.error(error);
+      showError(error, "Não foi possível salvar o link.");
     } finally {
       setIsCreatingLinkTrip(false);
     }

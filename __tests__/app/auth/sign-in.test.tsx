@@ -6,11 +6,17 @@ import {
 } from "@testing-library/react-native";
 
 import SignIn from "@/app/(auth)/sign-in";
+import { ToastProvider } from "@/contexts/ToastContext";
 import { useAuth } from "@/hooks/useAuth";
+import { AppError } from "@/utils/app-error";
 import { router } from "expo-router";
 import { Alert } from "react-native";
 
 jest.mock("@/hooks/useAuth");
+
+jest.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
 
 jest.mock("expo-router", () => ({
   router: {
@@ -27,6 +33,9 @@ jest.mock("lucide-react-native", () => {
     Eye: () => <Text>EyeIcon</Text>,
     EyeOff: () => <Text>EyeOffIcon</Text>,
     Plane: () => <Text>PlaneIcon</Text>,
+    CircleAlert: () => null,
+    CircleCheck: () => null,
+    Info: () => null,
   };
 });
 
@@ -73,7 +82,7 @@ describe("SignIn", () => {
       signIn: jest.fn(),
     });
 
-    render(<SignIn />);
+    render(<SignIn />, { wrapper: ToastProvider });
 
     expect(screen.getByText("Bem-vindo!")).toBeTruthy();
     expect(screen.getByPlaceholderText("E-mail")).toBeTruthy();
@@ -88,7 +97,7 @@ describe("SignIn", () => {
       signIn: signInMock,
     });
 
-    render(<SignIn />);
+    render(<SignIn />, { wrapper: ToastProvider });
 
     fireEvent.changeText(
       screen.getByPlaceholderText("E-mail"),
@@ -103,16 +112,14 @@ describe("SignIn", () => {
     });
   });
 
-  it("should show alert when signIn fails", async () => {
-    const signInMock = jest.fn().mockRejectedValue(new Error("Erro fake"));
-
+  function submitSignInRejectingWith(error: unknown) {
     jest.spyOn(Alert, "alert");
 
     mockedUseAuth.mockReturnValue({
-      signIn: signInMock,
+      signIn: jest.fn().mockRejectedValue(error),
     });
 
-    render(<SignIn />);
+    render(<SignIn />, { wrapper: ToastProvider });
 
     fireEvent.changeText(
       screen.getByPlaceholderText("E-mail"),
@@ -121,10 +128,34 @@ describe("SignIn", () => {
     fireEvent.changeText(screen.getByPlaceholderText("Senha"), "123456");
 
     fireEvent.press(screen.getByText("Entrar"));
+  }
 
-    await waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith("Login", "Erro fake");
-    });
+  it("should show an error toast with the fallback when signIn fails", async () => {
+    submitSignInRejectingWith(new Error("Erro fake"));
+
+    expect(await screen.findByText("Não foi possível entrar.")).toBeTruthy();
+    expect(screen.queryByText("Erro fake")).toBeNull();
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it("should show the api message when the credentials are wrong", async () => {
+    submitSignInRejectingWith(
+      new AppError("Credenciais incorretas.", { status: 401 }),
+    );
+
+    expect(await screen.findByText("Credenciais incorretas.")).toBeTruthy();
+  });
+
+  it("should show the network message when the server is unreachable", async () => {
+    submitSignInRejectingWith(
+      new AppError("Sem conexão com o servidor.", { code: "NETWORK" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Sem conexão com o servidor. Verifique sua internet e tente novamente.",
+      ),
+    ).toBeTruthy();
   });
 
   it("should toggle password visibility", () => {
@@ -132,7 +163,7 @@ describe("SignIn", () => {
       signIn: jest.fn(),
     });
 
-    render(<SignIn />);
+    render(<SignIn />, { wrapper: ToastProvider });
 
     const toggle = screen.getByText("EyeIcon");
 
@@ -146,7 +177,7 @@ describe("SignIn", () => {
       signIn: jest.fn(),
     });
 
-    render(<SignIn />);
+    render(<SignIn />, { wrapper: ToastProvider });
 
     fireEvent.press(screen.getByText("Cadastre-se"));
 

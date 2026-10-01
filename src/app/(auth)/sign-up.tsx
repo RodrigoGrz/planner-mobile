@@ -1,5 +1,6 @@
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
+import { useToast } from "@/contexts/ToastContext";
 import { registerServer } from "@/server/register-server";
 import { colors } from "@/styles/colors";
 import { maskPhone } from "@/utils/make-phone";
@@ -14,10 +15,11 @@ import {
   User,
 } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Image, Text, TouchableOpacity, View } from "react-native";
+import { Image, Text, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 export default function SignUp() {
+  const { showError, showSuccess } = useToast();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,10 +36,10 @@ export default function SignUp() {
         password,
         phone,
       });
-      Alert.alert("Criar conta", "Conta criada com sucesso");
+      showSuccess("Conta criada com sucesso!");
       router.back();
-    } catch (error: any) {
-      Alert.alert("Criar conta", error?.message ?? "Erro ao registrar");
+    } catch (error) {
+      showError(error, "Não foi possível criar a conta.");
     } finally {
       setLoading(false);
     }

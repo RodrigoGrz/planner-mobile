@@ -26,6 +26,7 @@ import {
 import { Toggle } from "@/components/toggle";
 import { useAuth } from "@/hooks/useAuth";
 import { useNetwork } from "@/contexts/NetworkContext";
+import { useToast } from "@/contexts/ToastContext";
 import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
 import { toApiDate } from "@/utils/to-api-date";
@@ -49,11 +50,10 @@ enum MODAL {
 export default function Create() {
   const { user } = useAuth();
   const { isOnline } = useNetwork();
+  const { showError, showErrorMessage, showSuccess, showInfo } = useToast();
 
-  // LOADING
   const [isCreatingTrip, setIsCreatingTrip] = useState(false);
 
-  //DATA
   const [stepForm, setStepForm] = useState(StepForm.TRIP_DETAILS);
   const [selectedDates, setSelectedDates] = useState({} as DatesSelected);
   const [destination, setDestination] = useState("");
@@ -62,7 +62,6 @@ export default function Create() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isEnabled, setIsEnabled] = useState(false);
 
-  // MODAL
   const [showModal, setShowModal] = useState(MODAL.NONE);
 
   function handleNextStepForm() {
@@ -71,17 +70,13 @@ export default function Create() {
       !selectedDates.startsAt ||
       !selectedDates.endsAt
     ) {
-      return Alert.alert(
-        "Detalhes da viagem",
-        "Preencha todos as informações da viagem para seguir.",
+      return showErrorMessage(
+        "Preencha todas as informações da viagem para seguir.",
       );
     }
 
     if (destination.length < 4) {
-      return Alert.alert(
-        "Detalhes da viagem",
-        "O destino deve ter pelo menos 4 caracteres.",
-      );
+      return showErrorMessage("O destino deve ter pelo menos 4 caracteres.");
     }
 
     if (stepForm === StepForm.TRIP_DETAILS) {
@@ -118,7 +113,7 @@ export default function Create() {
 
   function handleAddEmail() {
     if (!validateInput.email(emailToInvite)) {
-      return Alert.alert("Convidado", "E-mail inválido!");
+      return showErrorMessage("E-mail inválido.");
     }
 
     const emailAlreadyExists = emailsToInvite.find(
@@ -126,7 +121,7 @@ export default function Create() {
     );
 
     if (emailAlreadyExists) {
-      return Alert.alert("Convidado", "E-mail já foi adicionado!");
+      return showErrorMessage("E-mail já foi adicionado.");
     }
 
     setEmailsToInvite((prevState) => [...prevState, emailToInvite]);
@@ -138,8 +133,7 @@ export default function Create() {
       const granted = await calendarPermission();
 
       if (!granted) {
-        Alert.alert(
-          "Permissão necessária",
+        showErrorMessage(
           "Para sincronizar com o calendário, permita o acesso.",
         );
         return;
@@ -147,6 +141,23 @@ export default function Create() {
     }
 
     setIsEnabled((prev) => !prev);
+  }
+
+  async function syncWithCalendarIfEnabled() {
+    if (!isOnline || !isEnabled || !selectedDates.startsAt || !selectedDates.endsAt) {
+      return true;
+    }
+
+    try {
+      await syncTripWithCalendar({
+        destination,
+        startsAt: selectedDates.startsAt.dateString,
+        endsAt: selectedDates.endsAt.dateString,
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function createTrip() {
@@ -162,35 +173,21 @@ export default function Create() {
         coverImageUri: selectedImage,
       });
 
-      if (isOnline && isEnabled && selectedDates.startsAt && selectedDates.endsAt) {
-        try {
-          await syncTripWithCalendar({
-            destination,
-            startsAt: selectedDates.startsAt.dateString,
-            endsAt: selectedDates.endsAt.dateString,
-          });
-        } catch {
-          Alert.alert(
-            "Calendário",
-            "A viagem foi criada, mas não foi possível sincronizar com o calendário.",
-          );
-        }
+      const calendarSynced = await syncWithCalendarIfEnabled();
+
+      if (!calendarSynced) {
+        showErrorMessage(
+          "Viagem criada, mas não foi possível sincronizar com o calendário.",
+        );
+      } else if (isOnline) {
+        showSuccess("Viagem criada com sucesso!");
+      } else {
+        showInfo("Viagem salva offline. Será sincronizada quando houver conexão.");
       }
 
-      Alert.alert(
-        "Nova viagem",
-        isOnline
-          ? "Viagem criada com sucesso!"
-          : "Viagem salva offline. Será sincronizada quando houver conexão.",
-        [
-          {
-            text: "OK. Continuar.",
-            onPress: () => router.navigate(`/trip/${localId}`),
-          },
-        ],
-      );
-    } catch {
-      Alert.alert("Erro", "Não foi possível criar a viagem. Tente novamente.");
+      router.navigate(`/trip/${localId}`);
+    } catch (error) {
+      showError(error, "Não foi possível criar a viagem.");
     } finally {
       setIsCreatingTrip(false);
     }
@@ -205,10 +202,10 @@ export default function Create() {
 
     if (!result.canceled) {
       setSelectedImage(result.assets[0].uri);
-    } else if (result.canceled && selectedImage) {
-      alert("Você mantevem a mesma imagem.");
+    } else if (selectedImage) {
+      showInfo("A imagem anterior foi mantida.");
     } else {
-      alert("Você não selecionou nenhuma imagem.");
+      showInfo("Nenhuma imagem selecionada.");
     }
   }
 

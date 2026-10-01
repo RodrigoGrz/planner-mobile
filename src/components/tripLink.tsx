@@ -1,7 +1,8 @@
+import { useToast } from "@/contexts/ToastContext";
 import { colors } from "@/styles/colors";
 import * as Linking from "expo-linking";
 import { Link2 } from "lucide-react-native";
-import { Alert, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 
 export type TripLinkProps = {
   id: string;
@@ -23,9 +24,11 @@ function isSafeUrl(url: string) {
 }
 
 export function TripLink({ data }: Props) {
+  const { showErrorMessage } = useToast();
+
   function handleLinkOpen() {
     if (!isSafeUrl(data.url)) {
-      Alert.alert("Link", "Este link não pode ser aberto com segurança.");
+      showErrorMessage("Este link não pode ser aberto com segurança.");
       return;
     }
 
@@ -43,7 +46,12 @@ export function TripLink({ data }: Props) {
         </Text>
       </View>
 
-      <TouchableOpacity activeOpacity={0.7} onPress={handleLinkOpen}>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Abrir link"
+        onPress={handleLinkOpen}
+      >
         <Link2 color={colors.zinc[400]} size={20} />
       </TouchableOpacity>
     </View>

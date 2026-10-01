@@ -11,6 +11,7 @@ import { Loading } from "@/components/loading";
 import { Modal } from "@/components/modal";
 import { SyncingLabel } from "@/components/syncing-label";
 import { useNetwork } from "@/contexts/NetworkContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useTripScreenSync } from "@/hooks/useTripScreenSync";
 import { useTrip } from "@/hooks/useTrip";
 import { mutationService } from "@/services/mutation-service";
@@ -81,6 +82,7 @@ export default function Trip() {
   }>();
 
   const { trip: tripFromDb, status, refresh } = useTrip(tripParams.id);
+  const { showError, showErrorMessage, showSuccess, showInfo } = useToast();
 
   useTripScreenSync(tripParams.id);
 
@@ -150,9 +152,8 @@ export default function Trip() {
       }
 
       if (!destination || !selectedDates.startsAt || !selectedDates.endsAt) {
-        return Alert.alert(
-          "Atualizar viagem",
-          "Lembre-se de, além de preencher o destino, selecione a data de início e fim da viagem.",
+        return showErrorMessage(
+          "Preencha o destino e selecione as datas de início e fim da viagem.",
         );
       }
 
@@ -165,23 +166,19 @@ export default function Trip() {
         endsAt: toApiDate(selectedDates.endsAt.dateString),
       });
 
-      Alert.alert(
-        "Atualizar viagem",
-        isOnline
-          ? "Viagem atualizada com sucesso!"
-          : "Alterações salvas offline. Serão sincronizadas quando houver conexão.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              setShowModal(MODAL.NONE);
-              refresh();
-            },
-          },
-        ],
-      );
+      if (isOnline) {
+        showSuccess("Viagem atualizada com sucesso!");
+      } else {
+        showInfo(
+          "Alterações salvas offline. Serão sincronizadas quando houver conexão.",
+        );
+      }
+
+      setShowModal(MODAL.NONE);
+      refresh();
     } catch (error) {
       logger.error(error);
+      showError(error, "Não foi possível atualizar a viagem.");
     } finally {
       setIsUpdatingTrip(false);
     }
@@ -189,10 +186,7 @@ export default function Trip() {
 
   async function handleConfirmAttendance() {
     if (!isOnline) {
-      return Alert.alert(
-        "Sem conexão",
-        "Confirmar presença requer conexão com a internet.",
-      );
+      return showErrorMessage("Confirmar presença requer conexão com a internet.");
     }
 
     try {
@@ -201,14 +195,11 @@ export default function Trip() {
       }
 
       if (!guestName.trim() || !guestEmail.trim()) {
-        return Alert.alert(
-          "Confirmação",
-          "Preencha nome e e-mail para confirmar a viagem!",
-        );
+        return showErrorMessage("Preencha nome e e-mail para confirmar a viagem.");
       }
 
       if (!validateInput.email(guestEmail.trim())) {
-        return Alert.alert("Confirmação", "E-mail inválido");
+        return showErrorMessage("E-mail inválido.");
       }
 
       setIsConfirmingAttendance(true);
@@ -219,12 +210,12 @@ export default function Trip() {
         email: guestEmail.trim(),
       });
 
-      Alert.alert("Confirmação", "Viagem confirmada com sucesso!");
+      showSuccess("Viagem confirmada com sucesso!");
 
       setShowModal(MODAL.NONE);
     } catch (error) {
       logger.error(error);
-      Alert.alert("Confirmação", "Não foi possível confirmar!");
+      showError(error, "Não foi possível confirmar sua presença.");
     } finally {
       setIsConfirmingAttendance(false);
     }
@@ -271,6 +262,8 @@ export default function Trip() {
 
         <TouchableOpacity
           activeOpacity={0.6}
+          accessibilityRole="button"
+          accessibilityLabel="Editar viagem"
           className="w-9 h-9 bg-zinc-800 items-center justify-center rounded"
           onPress={() => setShowModal(MODAL.UPDATE_TRIP)}
         >

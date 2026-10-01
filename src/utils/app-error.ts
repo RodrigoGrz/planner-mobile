@@ -1,15 +1,19 @@
 export type AppErrorCode = "NETWORK";
 
+export type FieldErrors = Record<string, string[]>;
+
 type AppErrorOptions = {
     status?: number;
     code?: AppErrorCode;
     cause?: unknown;
+    fieldErrors?: FieldErrors;
 };
 
 export class AppError extends Error {
     status?: number;
     code?: AppErrorCode;
     cause?: unknown;
+    fieldErrors?: FieldErrors;
 
     constructor(message: string, options: AppErrorOptions = {}) {
         super(message);
@@ -17,6 +21,7 @@ export class AppError extends Error {
         this.status = options.status;
         this.code = options.code;
         this.cause = options.cause;
+        this.fieldErrors = options.fieldErrors;
     }
 }
 

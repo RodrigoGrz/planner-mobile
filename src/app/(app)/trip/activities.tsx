@@ -6,6 +6,7 @@ import { Loading } from "@/components/loading";
 import { Modal } from "@/components/modal";
 import { SyncingLabel } from "@/components/syncing-label";
 import { useNetwork } from "@/contexts/NetworkContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useActivities } from "@/hooks/useActivities";
 import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
@@ -19,7 +20,7 @@ import {
   Tag,
 } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Keyboard, SectionList, Text, View } from "react-native";
+import { Keyboard, SectionList, Text, View } from "react-native";
 import { TripData } from "./[id]";
 
 type Props = {
@@ -38,6 +39,8 @@ export function Activities({ tripDetails }: Props) {
     tripDetails.id,
   );
 
+  const { showError, showErrorMessage, showSuccess, showInfo } = useToast();
+
   const [showModal, setShowModal] = useState(MODAL.NONE);
   const [isCreatingActivity, setIsCreatingActivity] = useState(false);
   const [activityTitle, setActivityTitle] = useState("");
@@ -53,7 +56,7 @@ export function Activities({ tripDetails }: Props) {
   async function handleCreateTripACtivity() {
     try {
       if (!activityTitle || !activityDate || !activityHour) {
-        Alert.alert("Cadastrar atividade", "Preencha todos os campos!");
+        showErrorMessage("Preencha todos os campos.");
         return;
       }
 
@@ -67,12 +70,13 @@ export function Activities({ tripDetails }: Props) {
         title: activityTitle,
       });
 
-      Alert.alert(
-        "Nova Atividade",
-        isOnline
-          ? "Nova atividade cadastrada com sucesso!"
-          : "Atividade salva offline. Será sincronizada quando houver conexão.",
-      );
+      if (isOnline) {
+        showSuccess("Nova atividade cadastrada com sucesso!");
+      } else {
+        showInfo(
+          "Atividade salva offline. Será sincronizada quando houver conexão.",
+        );
+      }
 
       await refresh();
 
@@ -81,6 +85,7 @@ export function Activities({ tripDetails }: Props) {
       setShowModal(MODAL.NONE);
     } catch (error) {
       logger.error(error);
+      showError(error, "Não foi possível salvar a atividade.");
     } finally {
       setIsCreatingActivity(false);
     }
