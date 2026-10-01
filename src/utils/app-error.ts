@@ -1,7 +1,35 @@
-export class AppError {
-    message: string;
+export type AppErrorCode = "NETWORK";
 
-    constructor(message: string) {
-        this.message = message;
+type AppErrorOptions = {
+    status?: number;
+    code?: AppErrorCode;
+    cause?: unknown;
+};
+
+export class AppError extends Error {
+    status?: number;
+    code?: AppErrorCode;
+    cause?: unknown;
+
+    constructor(message: string, options: AppErrorOptions = {}) {
+        super(message);
+        this.name = "AppError";
+        this.status = options.status;
+        this.code = options.code;
+        this.cause = options.cause;
     }
+}
+
+export function getErrorStatus(error: unknown): number | undefined {
+    if (error instanceof AppError) {
+        return error.status;
+    }
+
+    if (typeof error !== "object" || error === null || !("response" in error)) {
+        return undefined;
+    }
+
+    const { response } = error as { response?: { status?: unknown } };
+
+    return typeof response?.status === "number" ? response.status : undefined;
 }

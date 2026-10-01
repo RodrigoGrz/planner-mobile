@@ -57,8 +57,8 @@ import {
   TripImagePayload,
   TripUpdatePayload,
 } from "@/types/sync";
+import { getErrorStatus } from "@/utils/app-error";
 import { logger } from "@/utils/logger";
-import { isAxiosError } from "axios";
 
 const MAX_RETRIES = 5;
 const BASE_RETRY_DELAY_MS = 1000;
@@ -112,17 +112,8 @@ function getNextRetryAt(retryCount: number) {
 }
 
 function getErrorMessage(error: unknown) {
-  if (isAxiosError(error)) {
-    if (error.response?.status === 401) {
-      return "AUTH_ERROR";
-    }
-
-    const message = error.response?.data?.message;
-    if (typeof message === "string") {
-      return message;
-    }
-
-    return error.message;
+  if (getErrorStatus(error) === 401) {
+    return "AUTH_ERROR";
   }
 
   if (error instanceof Error) {
@@ -189,7 +180,7 @@ async function processTripUpdate(item: CoalescedQueueItem) {
     await updateTripRemoteIdAfterSync(item.entityId, remoteTripId);
     notifyTripDataUpdated(item.entityId);
   } catch (error) {
-    if (isAxiosError(error) && error.response?.status === 409) {
+    if (getErrorStatus(error) === 409) {
       const serverTrip = await tripServer.getById(remoteTripId);
       await overwriteTripFromServer(serverTrip);
       notifyTripDataUpdated(item.entityId);
