@@ -1,4 +1,5 @@
 import { api } from "./api"
+import { readCreatedId } from "./read-created-id"
 
 type Activity = {
   id: string
@@ -19,12 +20,13 @@ type ActivityResponse = {
 
 async function create({ tripId, occursAt, title }: ActivityCreate) {
   try {
-    const { data } = await api.post<{ activityId: string }>(
-      `/trips/activity/register`,
-      { occursAt, title, tripId }
-    )
+    const { data } = await api.post<unknown>(`/trips/activity/register`, {
+      occursAt,
+      title,
+      tripId,
+    })
 
-    return data
+    return { activityId: readCreatedId(data, "activityId") }
   } catch (error) {
     throw error
   }

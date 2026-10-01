@@ -241,6 +241,15 @@ export async function markActivitySyncFailed(localId: string, errorMessage: stri
   );
 }
 
+export async function markActivitySyncedWithoutRemoteId(localId: string) {
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `UPDATE activities SET sync_status = 'synced', last_sync_error = NULL WHERE id = ?`,
+    [localId],
+  );
+}
+
 export async function markActivitySyncing(localId: string) {
   const db = await getDatabase();
 

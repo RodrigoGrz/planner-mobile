@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { readCreatedId } from "./read-created-id";
 
 export type Link = {
   id: string;
@@ -21,12 +22,13 @@ async function getLinksByTripId(tripId: string) {
 
 async function create({ tripId, title, url }: LinkCreate) {
   try {
-    const { data } = await api.post<{ linkId: string }>(
-      `/trips/link/register`,
-      { title, url, tripId },
-    );
+    const { data } = await api.post<unknown>(`/trips/link/register`, {
+      title,
+      url,
+      tripId,
+    });
 
-    return data;
+    return { linkId: readCreatedId(data, "linkId") };
   } catch (error) {
     throw error;
   }

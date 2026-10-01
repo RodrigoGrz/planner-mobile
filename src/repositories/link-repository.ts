@@ -196,6 +196,15 @@ export async function markLinkSyncFailed(localId: string, errorMessage: string) 
   );
 }
 
+export async function markLinkSyncedWithoutRemoteId(localId: string) {
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `UPDATE links SET sync_status = 'synced', last_sync_error = NULL WHERE id = ?`,
+    [localId],
+  );
+}
+
 export async function markLinkSyncing(localId: string) {
   const db = await getDatabase();
 

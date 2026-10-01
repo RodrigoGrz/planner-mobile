@@ -1,5 +1,6 @@
 import {
   getStoredActivityRemoteId,
+  markActivitySyncedWithoutRemoteId,
   markActivitySyncFailed,
   markActivitySyncing,
   resetActivitySyncStatus,
@@ -7,6 +8,7 @@ import {
 } from "@/repositories/activity-repository";
 import {
   getStoredLinkRemoteId,
+  markLinkSyncedWithoutRemoteId,
   markLinkSyncFailed,
   markLinkSyncing,
   resetLinkSyncStatus,
@@ -198,6 +200,16 @@ async function processTripUpdate(item: CoalescedQueueItem) {
   }
 }
 
+function reconcileTripAfterMissingId(
+  entityType: "activity" | "link",
+  tripId: string,
+) {
+  logger.warn(`Create ${entityType} response without id; pulling trip ${tripId}`);
+  void pullSyncTripData(tripId).catch((error) => {
+    logger.warn("Pull sync after missing id failed:", error);
+  });
+}
+
 async function processActivityCreate(item: CoalescedQueueItem) {
   const existingRemoteId = await getStoredActivityRemoteId(item.entityId);
   if (existingRemoteId) {
@@ -215,7 +227,13 @@ async function processActivityCreate(item: CoalescedQueueItem) {
     occursAt: payload.occursAt,
   });
 
-  await updateActivityRemoteIdAfterSync(item.entityId, response.activityId);
+  if (response.activityId) {
+    await updateActivityRemoteIdAfterSync(item.entityId, response.activityId);
+  } else {
+    await markActivitySyncedWithoutRemoteId(item.entityId);
+    reconcileTripAfterMissingId("activity", payload.tripId);
+  }
+
   notifyTripDataUpdated(payload.tripId);
 }
 
@@ -236,7 +254,13 @@ async function processLinkCreate(item: CoalescedQueueItem) {
     url: payload.url,
   });
 
-  await updateLinkRemoteIdAfterSync(item.entityId, response.linkId);
+  if (response.linkId) {
+    await updateLinkRemoteIdAfterSync(item.entityId, response.linkId);
+  } else {
+    await markLinkSyncedWithoutRemoteId(item.entityId);
+    reconcileTripAfterMissingId("link", payload.tripId);
+  }
+
   notifyTripDataUpdated(payload.tripId);
 }
 
