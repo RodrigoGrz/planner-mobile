@@ -1,5 +1,5 @@
 import { storageAuthTokenGet } from "@/storage/auth-token";
-import { AppError } from "@/utils/app-error";
+import { AppError, FieldErrors } from "@/utils/app-error";
 import axios, { AxiosError, AxiosInstance } from "axios";
 
 type SignOut = () => void;
@@ -60,6 +60,20 @@ function readApiMessage(data: unknown) {
   return typeof message === "string" && message.length > 0 ? message : null;
 }
 
+function readFieldErrors(data: unknown): FieldErrors | undefined {
+  if (typeof data !== "object" || data === null || !("errors" in data)) {
+    return undefined;
+  }
+
+  const { errors } = data as { errors: unknown };
+
+  if (typeof errors !== "object" || errors === null || Array.isArray(errors)) {
+    return undefined;
+  }
+
+  return errors as FieldErrors;
+}
+
 function toAppError(requestError: AxiosError) {
   const { response } = requestError;
 
@@ -73,6 +87,8 @@ function toAppError(requestError: AxiosError) {
   return new AppError(readApiMessage(response.data) ?? requestError.message, {
     status: response.status,
     cause: requestError,
+    fieldErrors:
+      response.status === 400 ? readFieldErrors(response.data) : undefined,
   });
 }
 

@@ -12,6 +12,7 @@ import { OfflineBanner } from "@/components/offline-banner"
 import { AuthContextProvider } from "@/contexts/AuthContext"
 import { NetworkProvider } from "@/contexts/NetworkContext"
 import { SyncProvider } from "@/contexts/SyncContext"
+import { ToastProvider } from "@/contexts/ToastContext"
 import { initDatabase } from "@/database/init"
 
 export default function RootLayout() {
@@ -35,16 +36,18 @@ export default function RootLayout() {
     }
 
     return (
-        <AuthContextProvider>
-            <NetworkProvider>
-                <SyncProvider>
-                    <View className="flex-1 bg-zinc-950">
-                        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-                        <OfflineBanner />
-                        <Slot />
-                    </View>
-                </SyncProvider>
-            </NetworkProvider>
-        </AuthContextProvider>
+        <ToastProvider>
+            <AuthContextProvider>
+                <NetworkProvider>
+                    <SyncProvider>
+                        <View className="flex-1 bg-zinc-950">
+                            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+                            <OfflineBanner />
+                            <Slot />
+                        </View>
+                    </SyncProvider>
+                </NetworkProvider>
+            </AuthContextProvider>
+        </ToastProvider>
     )
 }

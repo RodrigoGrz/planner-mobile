@@ -100,6 +100,39 @@ describe("api", () => {
     });
   });
 
+  it("should keep field errors on a 400 validation response", async () => {
+    failWithResponse(400, {
+      message: "Validation error",
+      errors: { email: ["Invalid email"], password: ["Too short"] },
+    });
+
+    const error = (await captureError(api.post("/travelers/register"))) as AppError;
+
+    expect(error.fieldErrors).toEqual({
+      email: ["Invalid email"],
+      password: ["Too short"],
+    });
+  });
+
+  it("should not keep field errors when errors is not an object", async () => {
+    failWithResponse(400, { message: "Validation error", errors: "invalid" });
+
+    const error = (await captureError(api.post("/travelers/register"))) as AppError;
+
+    expect(error.fieldErrors).toBeUndefined();
+  });
+
+  it("should not keep field errors on non validation statuses", async () => {
+    failWithResponse(409, {
+      message: "E-mail já cadastrado",
+      errors: { email: ["taken"] },
+    });
+
+    const error = (await captureError(api.post("/travelers/register"))) as AppError;
+
+    expect(error.fieldErrors).toBeUndefined();
+  });
+
   it("should reject a network AppError when there is no response", async () => {
     unregister = api.registerInterceptTokenManager(jest.fn());
     failWithoutResponse();

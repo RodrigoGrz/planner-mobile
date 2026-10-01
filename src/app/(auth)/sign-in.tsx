@@ -1,15 +1,17 @@
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
+import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/hooks/useAuth";
 import { colors } from "@/styles/colors";
 import { router } from "expo-router";
 import { Eye, EyeOff, Lock, Mail, Plane } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Image, Text, TouchableOpacity, View } from "react-native";
+import { Image, Text, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 export default function SignIn() {
   const { signIn } = useAuth();
+  const { showError } = useToast();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,8 +22,8 @@ export default function SignIn() {
     try {
       setLoading(true);
       await signIn(email, password);
-    } catch (error: any) {
-      Alert.alert("Login", error?.message ?? "Erro ao fazer login");
+    } catch (error) {
+      showError(error, "Não foi possível entrar.");
     } finally {
       setLoading(false);
     }

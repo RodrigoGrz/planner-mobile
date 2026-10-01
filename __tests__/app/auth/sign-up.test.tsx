@@ -7,8 +7,14 @@ import {
 import { Alert } from "react-native";
 
 import SignUp from "@/app/(auth)/sign-up";
+import { ToastProvider } from "@/contexts/ToastContext";
 import { registerServer } from "@/server/register-server";
+import { AppError } from "@/utils/app-error";
 import { router } from "expo-router";
+
+jest.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
 
 jest.mock("expo-router", () => ({
   router: {
@@ -31,6 +37,9 @@ jest.mock("lucide-react-native", () => ({
   Pencil: () => null,
   Phone: () => null,
   User: () => null,
+  CircleAlert: () => null,
+  CircleCheck: () => null,
+  Info: () => null,
 }));
 
 jest.mock("@/components/input", () => {
@@ -72,7 +81,7 @@ describe("SignUp", () => {
   });
 
   it("should render screen correctly", () => {
-    render(<SignUp />);
+    render(<SignUp />, { wrapper: ToastProvider });
 
     expect(screen.getByText("Criar uma conta?")).toBeTruthy();
     expect(screen.getByPlaceholderText("Nome")).toBeTruthy();
@@ -89,7 +98,7 @@ describe("SignUp", () => {
 
     jest.spyOn(Alert, "alert");
 
-    render(<SignUp />);
+    render(<SignUp />, { wrapper: ToastProvider });
 
     fireEvent.changeText(screen.getByPlaceholderText("Nome"), "Rodrigo");
     fireEvent.changeText(
@@ -110,32 +119,54 @@ describe("SignUp", () => {
       });
     });
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      "Criar conta",
-      "Conta criada com sucesso",
-    );
-
+    expect(await screen.findByText("Conta criada com sucesso!")).toBeTruthy();
+    expect(Alert.alert).not.toHaveBeenCalled();
     expect(router.back).toHaveBeenCalled();
   });
 
-  it("should show alert when register fails", async () => {
-    jest
-      .spyOn(registerServer, "registerTraveler")
-      .mockRejectedValue(new Error("Erro fake"));
-
+  function submitRegisterRejectingWith(error: unknown) {
+    jest.spyOn(registerServer, "registerTraveler").mockRejectedValue(error);
     jest.spyOn(Alert, "alert");
 
-    render(<SignUp />);
+    render(<SignUp />, { wrapper: ToastProvider });
 
     fireEvent.press(screen.getByText("Registrar"));
+  }
 
-    await waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith("Criar conta", "Erro fake");
-    });
+  it("should show an error toast with the fallback when register fails", async () => {
+    submitRegisterRejectingWith(new Error("Erro fake"));
+
+    expect(
+      await screen.findByText("Não foi possível criar a conta."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Erro fake")).toBeNull();
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it("should show the invalid fields when the api returns a validation error", async () => {
+    submitRegisterRejectingWith(
+      new AppError("Validation error", {
+        status: 400,
+        fieldErrors: { email: ["Invalid email"], phone: ["Too short"] },
+      }),
+    );
+
+    expect(
+      await screen.findByText("Verifique os campos: e-mail, telefone."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Validation error")).toBeNull();
+  });
+
+  it("should show the api message on a conflict", async () => {
+    submitRegisterRejectingWith(
+      new AppError("E-mail já cadastrado.", { status: 409 }),
+    );
+
+    expect(await screen.findByText("E-mail já cadastrado.")).toBeTruthy();
   });
 
   it("should toggle password visibility", () => {
-    render(<SignUp />);
+    render(<SignUp />, { wrapper: ToastProvider });
 
     const toggle = screen.getByTestId("toggle-password");
 
@@ -145,7 +176,7 @@ describe("SignUp", () => {
   });
 
   it("should navigate to sign-in", () => {
-    render(<SignUp />);
+    render(<SignUp />, { wrapper: ToastProvider });
 
     fireEvent.press(screen.getByText("Entrar"));
 
