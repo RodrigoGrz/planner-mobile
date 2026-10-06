@@ -89,7 +89,7 @@ export async function getQueueItemsOrdered() {
 
   const rows = await db.getAllAsync<SyncQueueRow>(
     `SELECT * FROM sync_queue
-     WHERE status IN ('pending', 'failed')
+     WHERE status = 'pending'
        AND (next_retry_at IS NULL OR next_retry_at <= ?)
      ORDER BY created_at ASC`,
     [now],
@@ -126,6 +126,16 @@ export async function markQueueItemFailed(
       nextRetryAt,
       id,
     ],
+  );
+}
+
+export async function resetQueueItemsFailedByAuth() {
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `UPDATE sync_queue
+     SET status = 'pending', last_error = NULL, next_retry_at = NULL
+     WHERE status = 'failed' AND last_error = 'AUTH_ERROR'`,
   );
 }
 
@@ -180,11 +190,11 @@ export async function countSyncingQueueItems() {
   return row?.count ?? 0;
 }
 
-export async function countActiveQueueItems() {
+export async function countQueueItemsWaitingToSend() {
   const db = await getDatabase();
 
   const row = await db.getFirstAsync<{ count: number }>(
-    "SELECT COUNT(*) as count FROM sync_queue WHERE status IN ('pending', 'failed', 'syncing')",
+    "SELECT COUNT(*) as count FROM sync_queue WHERE status IN ('pending', 'syncing')",
   );
 
   return row?.count ?? 0;

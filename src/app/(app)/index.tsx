@@ -3,15 +3,35 @@ import { Loading } from "@/components/loading";
 import { NextTrip } from "@/components/nextTrip";
 import { SyncingLabel } from "@/components/syncing-label";
 import { TripItem } from "@/components/tripItem";
+import { useSync } from "@/contexts/SyncContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
 import { router } from "expo-router";
-import { FlatList, Text, TouchableOpacity, View } from "react-native";
+import { Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Index() {
   const { signOut } = useAuth();
+  const { pendingCount, failedCount, syncingCount } = useSync();
   const { trips, nextTrip, status } = useTrips();
+
+  function handleSignOut() {
+    const unsyncedCount = pendingCount + failedCount + syncingCount;
+
+    if (unsyncedCount === 0) {
+      void signOut();
+      return;
+    }
+
+    Alert.alert(
+      "Sair",
+      `Você tem ${unsyncedCount} alteração(ões) não sincronizada(s). Se sair agora, elas serão perdidas.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Sair", style: "destructive", onPress: () => void signOut() },
+      ],
+    );
+  }
 
   if (status === "loading") {
     return <Loading />;
@@ -27,7 +47,7 @@ export default function Index() {
             </Text>
             <SyncingLabel visible={status === "syncing"} />
           </View>
-          <TouchableOpacity activeOpacity={0.7} onPress={signOut}>
+          <TouchableOpacity activeOpacity={0.7} onPress={handleSignOut}>
             <Text className="text-lime-300 text-base">Sair</Text>
           </TouchableOpacity>
         </View>

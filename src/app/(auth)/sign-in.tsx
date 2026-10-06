@@ -1,8 +1,10 @@
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
+import { useSync } from "@/contexts/SyncContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/hooks/useAuth";
 import { colors } from "@/styles/colors";
+import { ERROR_MESSAGES } from "@/utils/error-messages";
 import { router } from "expo-router";
 import { Eye, EyeOff, Lock, Mail, Plane } from "lucide-react-native";
 import { useState } from "react";
@@ -10,8 +12,14 @@ import { Image, Text, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 export default function SignIn() {
-  const { signIn } = useAuth();
+  const { signIn, sessionExpired } = useAuth();
+  const { pendingCount, failedCount, syncingCount } = useSync();
   const { showError } = useToast();
+
+  const hasUnsyncedChanges = pendingCount + failedCount + syncingCount > 0;
+  const sessionExpiredMessage = hasUnsyncedChanges
+    ? ERROR_MESSAGES.sessionExpired
+    : ERROR_MESSAGES.sessionExpiredWithoutChanges;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,6 +61,12 @@ export default function SignIn() {
           <Text className="text-zinc-400 text-center text-lg my-5">
             Planeje viagens incríveis com seus amigos.
           </Text>
+
+          {sessionExpired ? (
+            <Text className="text-amber-200 text-center mb-2">
+              {sessionExpiredMessage}
+            </Text>
+          ) : null}
 
           <Input className="my-4" variant="secondary">
             <Mail color={colors.zinc[400]} size={20} />
