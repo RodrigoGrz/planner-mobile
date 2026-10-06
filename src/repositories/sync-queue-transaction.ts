@@ -42,3 +42,22 @@ export async function enqueueSyncItemInTransaction(
 
   return id;
 }
+
+export async function removeQueueItemsForTripInTransaction(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  tripIds: string[],
+) {
+  if (tripIds.length === 0) {
+    return;
+  }
+
+  const placeholders = tripIds.map(() => "?").join(", ");
+
+  await db.runAsync(
+    `DELETE FROM sync_queue
+     WHERE entity_id IN (${placeholders})
+        OR depends_on_entity_id IN (${placeholders})
+        OR json_extract(payload, '$.tripId') IN (${placeholders})`,
+    [...tripIds, ...tripIds, ...tripIds],
+  );
+}

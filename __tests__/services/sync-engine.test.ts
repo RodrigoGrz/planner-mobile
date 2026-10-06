@@ -1,6 +1,7 @@
 import {
   markActivitySyncedWithoutRemoteId,
   markActivitySyncFailed,
+  resetActivitySyncStatus,
   updateActivityRemoteIdAfterSync,
 } from "@/repositories/activity-repository";
 import {
@@ -11,14 +12,24 @@ import {
   getQueueItemsOrdered,
   markQueueItemFailed,
   removeQueueItems,
+  resetStaleSyncingItems,
 } from "@/repositories/sync-queue-repository";
-import { overwriteTripFromServer } from "@/repositories/trip-repository";
+import {
+  getStoredRemoteId,
+  markTripSyncFailed,
+  overwriteTripFromServer,
+  removeTripLocally,
+  resetTripSyncStatus,
+} from "@/repositories/trip-repository";
 import { activitiesServer } from "@/server/activities-server";
 import { linksServer } from "@/server/links-server";
 import { tripServer } from "@/server/trip-server";
-import { processSyncQueue } from "@/services/sync-engine";
+import { processSyncQueue, subscribeSyncFailure } from "@/services/sync-engine";
 import { syncActivities } from "@/services/sync-service";
-import { notifyTripDataUpdated } from "@/services/trip-sync-events";
+import {
+  notifyTripDataUpdated,
+  notifyTripRemoved,
+} from "@/services/trip-sync-events";
 import { SyncQueueItem } from "@/types/sync";
 import { AppError } from "@/utils/app-error";
 
@@ -60,6 +71,7 @@ jest.mock("@/repositories/trip-repository", () => ({
   markTripSyncFailed: jest.fn(),
   markTripSyncing: jest.fn(),
   overwriteTripFromServer: jest.fn(),
+  removeTripLocally: jest.fn(),
   resetTripSyncStatus: jest.fn(),
   resolveLocalTripId: jest.fn((tripId: string) => Promise.resolve(tripId)),
   resolveRemoteId: jest.fn(() => Promise.resolve("trip-remote-1")),
@@ -76,6 +88,7 @@ jest.mock("@/server/links-server", () => ({
 
 jest.mock("@/server/trip-server", () => ({
   tripServer: {
+    create: jest.fn(),
     update: jest.fn(),
     getById: jest.fn(),
   },
@@ -90,6 +103,7 @@ jest.mock("@/services/sync-service", () => ({
 
 jest.mock("@/services/trip-sync-events", () => ({
   notifyTripDataUpdated: jest.fn(),
+  notifyTripRemoved: jest.fn(),
 }));
 
 jest.mock("@/utils/logger", () => ({
@@ -130,6 +144,18 @@ const linkItem = makeQueueItem({
   },
 });
 
+const tripUpdateItem = makeQueueItem({
+  id: "queue-3",
+  entityType: "trip",
+  operation: "update",
+  entityId: "trip-local-1",
+  payload: {
+    destination: "Paris",
+    startsAt: "2026-10-01T00:00:00.000Z",
+    endsAt: "2026-10-05T00:00:00.000Z",
+  },
+});
+
 function queueOnce(item: SyncQueueItem) {
   (getQueueItemsOrdered as jest.Mock)
     .mockResolvedValueOnce([item])
@@ -141,8 +167,16 @@ async function flushPromises() {
 }
 
 describe("sync-engine", () => {
+  const failureListener = jest.fn();
+  let unsubscribeFailure: () => void;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    unsubscribeFailure = subscribeSyncFailure(failureListener);
+  });
+
+  afterEach(() => {
+    unsubscribeFailure();
   });
 
   it("should store the remote id returned when creating an activity", async () => {
@@ -256,49 +290,401 @@ describe("sync-engine", () => {
     expect(linksServer.create).not.toHaveBeenCalled();
   });
 
-  it("should reload the trip from the server on a 409 AppError", async () => {
-    const serverTrip = { id: "trip-remote-1", destination: "Paris" };
-
-    queueOnce(
-      makeQueueItem({
-        id: "queue-3",
-        entityType: "trip",
-        operation: "update",
-        entityId: "trip-local-1",
-        payload: {
-          destination: "Paris",
-          startsAt: "2026-10-01T00:00:00.000Z",
-          endsAt: "2026-10-05T00:00:00.000Z",
-        },
-      }),
-    );
+  it("should retry a 409 response with backoff", async () => {
+    queueOnce(tripUpdateItem);
     (tripServer.update as jest.Mock).mockRejectedValue(
-      new AppError("Viagem em conflito", { status: 409 }),
+      new AppError("A viagem foi alterada por outra requisição", { status: 409 }),
     );
-    (tripServer.getById as jest.Mock).mockResolvedValue(serverTrip);
 
     await processSyncQueue();
 
-    expect(tripServer.getById).toHaveBeenCalledWith("trip-remote-1");
-    expect(overwriteTripFromServer).toHaveBeenCalledWith(serverTrip);
-    expect(removeQueueItems).toHaveBeenCalledWith(["queue-3"]);
-    expect(markQueueItemFailed).not.toHaveBeenCalled();
+    expect(tripServer.getById).not.toHaveBeenCalled();
+    expect(overwriteTripFromServer).not.toHaveBeenCalled();
+    expect(markQueueItemFailed).toHaveBeenCalledWith(
+      "queue-3",
+      "A viagem foi alterada por outra requisição",
+      1,
+      expect.any(String),
+    );
+    expect(resetTripSyncStatus).toHaveBeenCalledWith("trip-local-1", "pending");
   });
 
   it("should store the api message as the queue error", async () => {
     queueOnce(activityItem);
     (activitiesServer.create as jest.Mock).mockRejectedValue(
-      new AppError("Viagem não encontrada", { status: 404 }),
+      new AppError("Viagem em conflito", { status: 409 }),
     );
 
     await processSyncQueue();
 
     expect(markQueueItemFailed).toHaveBeenCalledWith(
       "queue-1",
-      "Viagem não encontrada",
+      "Viagem em conflito",
       1,
       expect.any(String),
     );
+  });
+
+  it("should not retry a 422 response", async () => {
+    queueOnce(activityItem);
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("A data está fora das datas da viagem", { status: 422 }),
+    );
+
+    await processSyncQueue();
+
+    expect(markQueueItemFailed).toHaveBeenCalledWith(
+      "queue-1",
+      "A data está fora das datas da viagem",
+      1,
+      null,
+    );
+    expect(markActivitySyncFailed).toHaveBeenCalledWith(
+      "activity-local-1",
+      "A data está fora das datas da viagem",
+    );
+    expect(resetActivitySyncStatus).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [422, "Data de início inválida."],
+    [403, "Você não tem permissão para alterar esta viagem."],
+  ])(
+    "should reload the trip from the server when an update returns %i",
+    async (status, message) => {
+      const serverTrip = { id: "trip-remote-1", destination: "Paris" };
+      queueOnce(tripUpdateItem);
+      (tripServer.update as jest.Mock).mockRejectedValue(
+        new AppError("Data de início inválida.", { status }),
+      );
+      (tripServer.getById as jest.Mock).mockResolvedValue(serverTrip);
+
+      await processSyncQueue();
+
+      expect(tripServer.getById).toHaveBeenCalledWith("trip-remote-1");
+      expect(overwriteTripFromServer).toHaveBeenCalledWith(serverTrip);
+      expect(notifyTripDataUpdated).toHaveBeenCalledWith("trip-local-1");
+      expect(removeQueueItems).toHaveBeenCalledWith(["queue-3"]);
+      expect(markQueueItemFailed).not.toHaveBeenCalled();
+      expect(failureListener).toHaveBeenCalledWith({ message });
+    },
+  );
+
+  it("should mark the trip as failed when the reload after a 403 also fails", async () => {
+    queueOnce(tripUpdateItem);
+    (tripServer.update as jest.Mock).mockRejectedValue(
+      new AppError("Não permitido", { status: 403 }),
+    );
+    (tripServer.getById as jest.Mock).mockRejectedValue(
+      new AppError("Não permitido", { status: 403 }),
+    );
+
+    await processSyncQueue();
+
+    expect(overwriteTripFromServer).not.toHaveBeenCalled();
+    expect(markQueueItemFailed).toHaveBeenCalledWith(
+      "queue-3",
+      "Você não tem permissão para alterar esta viagem.",
+      1,
+      null,
+    );
+    expect(markTripSyncFailed).toHaveBeenCalledWith(
+      "trip-local-1",
+      "Você não tem permissão para alterar esta viagem.",
+    );
+  });
+
+  it("should remove the local trip when an update returns 404", async () => {
+    queueOnce(tripUpdateItem);
+    (getStoredRemoteId as jest.Mock).mockResolvedValue("trip-remote-1");
+    (removeTripLocally as jest.Mock).mockResolvedValue([
+      "trip-local-1",
+      "trip-remote-1",
+    ]);
+    (tripServer.update as jest.Mock).mockRejectedValue(
+      new AppError("Recurso não encontrado.", { status: 404 }),
+    );
+
+    await processSyncQueue();
+
+    expect(removeTripLocally).toHaveBeenCalledWith("trip-local-1");
+    expect(notifyTripRemoved).toHaveBeenCalledWith([
+      "trip-local-1",
+      "trip-remote-1",
+    ]);
+    expect(markQueueItemFailed).not.toHaveBeenCalled();
+    expect(markTripSyncFailed).not.toHaveBeenCalled();
+    expect(failureListener).toHaveBeenCalledWith({
+      message: "Esta viagem não existe mais e foi removida do aparelho.",
+    });
+  });
+
+  it("should remove the local trip when an activity create returns 404", async () => {
+    queueOnce(activityItem);
+    (getStoredRemoteId as jest.Mock).mockResolvedValue("trip-remote-1");
+    (removeTripLocally as jest.Mock).mockResolvedValue(["trip-1", "trip-remote-1"]);
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("Recurso não encontrado.", { status: 404 }),
+    );
+
+    await processSyncQueue();
+
+    expect(removeTripLocally).toHaveBeenCalledWith("trip-1");
+    expect(notifyTripRemoved).toHaveBeenCalledWith(["trip-1", "trip-remote-1"]);
+    expect(markActivitySyncFailed).not.toHaveBeenCalled();
+  });
+
+  it("should treat a 404 on a trip without remote id as permanent", async () => {
+    queueOnce(
+      makeQueueItem({
+        id: "queue-4",
+        entityType: "trip",
+        operation: "create",
+        entityId: "trip-local-1",
+        payload: {
+          destination: "Paris",
+          startsAt: "2026-10-01T00:00:00.000Z",
+          endsAt: "2026-10-05T00:00:00.000Z",
+          emailsToInvite: [],
+          ownerName: "Ana",
+        },
+      }),
+    );
+    (getStoredRemoteId as jest.Mock).mockResolvedValue(null);
+    (tripServer.create as jest.Mock).mockRejectedValue(
+      new AppError("Recurso não encontrado.", { status: 404 }),
+    );
+
+    await processSyncQueue();
+
+    expect(removeTripLocally).not.toHaveBeenCalled();
+    expect(markQueueItemFailed).toHaveBeenCalledWith(
+      "queue-4",
+      "Recurso não encontrado.",
+      1,
+      null,
+    );
+    expect(markTripSyncFailed).toHaveBeenCalledWith(
+      "trip-local-1",
+      "Recurso não encontrado.",
+    );
+  });
+
+  it("should retry 5xx responses with backoff", async () => {
+    queueOnce(activityItem);
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("Internal server error", { status: 503 }),
+    );
+
+    await processSyncQueue();
+
+    expect(markQueueItemFailed).toHaveBeenCalledWith(
+      "queue-1",
+      "Algo deu errado no servidor. Tente novamente em instantes.",
+      1,
+      expect.any(String),
+    );
+    expect(resetActivitySyncStatus).toHaveBeenCalledWith(
+      "activity-local-1",
+      "pending",
+    );
+    expect(markActivitySyncFailed).not.toHaveBeenCalled();
+  });
+
+  it("should notify a failure with its message at the end of the run", async () => {
+    queueOnce(activityItem);
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("A data está fora das datas da viagem", { status: 422 }),
+    );
+
+    await processSyncQueue();
+
+    expect(failureListener).toHaveBeenCalledTimes(1);
+    expect(failureListener).toHaveBeenCalledWith({
+      message: "A data está fora das datas da viagem",
+    });
+  });
+
+  it("should summarize multiple failures in a single notification", async () => {
+    (getQueueItemsOrdered as jest.Mock)
+      .mockResolvedValueOnce([activityItem, linkItem])
+      .mockResolvedValue([]);
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("A data está fora das datas da viagem", { status: 422 }),
+    );
+    (linksServer.create as jest.Mock).mockRejectedValue(
+      new AppError("Link inválido", { status: 400 }),
+    );
+
+    await processSyncQueue();
+
+    expect(failureListener).toHaveBeenCalledTimes(1);
+    expect(failureListener).toHaveBeenCalledWith({
+      message: "2 alterações não puderam ser sincronizadas.",
+    });
+  });
+
+  it("should notify a failure when a retryable error exhausts the retries", async () => {
+    queueOnce(makeQueueItem({ retryCount: 4 }));
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("Internal server error", { status: 503 }),
+    );
+
+    await processSyncQueue();
+
+    expect(markQueueItemFailed).toHaveBeenCalledWith(
+      "queue-1",
+      "Algo deu errado no servidor. Tente novamente em instantes.",
+      5,
+      null,
+    );
+    expect(failureListener).toHaveBeenCalledWith({
+      message: "Algo deu errado no servidor. Tente novamente em instantes.",
+    });
+  });
+
+  it("should not notify a failure before the last retry", async () => {
+    queueOnce(activityItem);
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("Internal server error", { status: 503 }),
+    );
+
+    await processSyncQueue();
+
+    expect(failureListener).not.toHaveBeenCalled();
+  });
+
+  it("should not notify a failure when the sync succeeds", async () => {
+    queueOnce(activityItem);
+    (activitiesServer.create as jest.Mock).mockResolvedValue({
+      activityId: "activity-remote-1",
+    });
+
+    await processSyncQueue();
+
+    expect(failureListener).not.toHaveBeenCalled();
+  });
+
+  describe("rate limit", () => {
+    const now = new Date("2026-10-06T12:00:00.000Z");
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now });
+    });
+
+    afterEach(() => {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    });
+
+    it("should retry a 429 after the Retry-After delay without consuming a retry", async () => {
+      queueOnce(makeQueueItem({ retryCount: 2 }));
+      (activitiesServer.create as jest.Mock).mockRejectedValue(
+        new AppError("Too many requests", { status: 429, retryAfterMs: 30000 }),
+      );
+
+      await processSyncQueue();
+
+      expect(markQueueItemFailed).toHaveBeenCalledWith(
+        "queue-1",
+        "Muitas requisições, tentando novamente em instantes.",
+        2,
+        "2026-10-06T12:00:30.000Z",
+      );
+      expect(resetActivitySyncStatus).toHaveBeenCalledWith(
+        "activity-local-1",
+        "pending",
+      );
+      expect(markActivitySyncFailed).not.toHaveBeenCalled();
+    });
+
+    it("should stop processing the queue after a 429", async () => {
+      (getQueueItemsOrdered as jest.Mock)
+        .mockResolvedValueOnce([activityItem, linkItem])
+        .mockResolvedValue([]);
+      (activitiesServer.create as jest.Mock).mockRejectedValue(
+        new AppError("Too many requests", { status: 429, retryAfterMs: 30000 }),
+      );
+
+      await processSyncQueue();
+
+      expect(linksServer.create).not.toHaveBeenCalled();
+    });
+
+    it("should run the queue again when the Retry-After delay elapses", async () => {
+      queueOnce(activityItem);
+      (activitiesServer.create as jest.Mock).mockRejectedValue(
+        new AppError("Too many requests", { status: 429, retryAfterMs: 30000 }),
+      );
+
+      await processSyncQueue();
+      expect(getQueueItemsOrdered).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(29999);
+      expect(getQueueItemsOrdered).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(1);
+      expect(getQueueItemsOrdered).toHaveBeenCalledTimes(2);
+    });
+
+    it("should wait at least the base delay when Retry-After is zero", async () => {
+      queueOnce(activityItem);
+      (activitiesServer.create as jest.Mock).mockRejectedValue(
+        new AppError("Too many requests", { status: 429, retryAfterMs: 0 }),
+      );
+
+      await processSyncQueue();
+
+      expect(markQueueItemFailed).toHaveBeenCalledWith(
+        "queue-1",
+        "Muitas requisições, tentando novamente em instantes.",
+        0,
+        "2026-10-06T12:00:01.000Z",
+      );
+
+      await jest.advanceTimersByTimeAsync(999);
+      expect(getQueueItemsOrdered).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(1);
+      expect(getQueueItemsOrdered).toHaveBeenCalledTimes(2);
+    });
+
+    it("should run the queue again when the Retry-After delay elapses during another sync", async () => {
+      queueOnce(activityItem);
+      (activitiesServer.create as jest.Mock).mockRejectedValue(
+        new AppError("Too many requests", { status: 429, retryAfterMs: 30000 }),
+      );
+
+      await processSyncQueue();
+
+      let releaseRunningSync: () => void = () => {};
+      (resetStaleSyncingItems as jest.Mock).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseRunningSync = resolve;
+          }),
+      );
+      const runningSync = processSyncQueue();
+
+      await jest.advanceTimersByTimeAsync(30000);
+      releaseRunningSync();
+      await runningSync;
+      expect(getQueueItemsOrdered).toHaveBeenCalledTimes(2);
+
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(getQueueItemsOrdered).toHaveBeenCalledTimes(3);
+    });
+
+    it("should not notify a failure for a 429", async () => {
+      queueOnce(activityItem);
+      (activitiesServer.create as jest.Mock).mockRejectedValue(
+        new AppError("Too many requests", { status: 429, retryAfterMs: 30000 }),
+      );
+
+      await processSyncQueue();
+
+      expect(failureListener).not.toHaveBeenCalled();
+    });
   });
 
   it("should not schedule a trip pull when the api returns the id", async () => {

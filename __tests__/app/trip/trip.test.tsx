@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { router } from "expo-router";
 import { Alert } from "react-native";
 
 import Trip from "@/app/(app)/trip/[id]";
@@ -30,11 +31,14 @@ const mockTrip = {
   updatedAt: new Date("2030-09-01T12:00:00.000Z"),
 };
 
+let mockIsRemoved = false;
+
 jest.mock("@/hooks/useTrip", () => ({
   useTrip: () => ({
-    trip: mockTrip,
+    trip: mockIsRemoved ? null : mockTrip,
     status: "ready",
     refresh: mockRefresh,
+    isRemoved: mockIsRemoved,
   }),
 }));
 
@@ -127,8 +131,23 @@ describe("Trip", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsOnline = true;
+    mockIsRemoved = false;
     mockSearchParams = { id: "trip-1" };
     jest.spyOn(Alert, "alert");
+  });
+
+  it("should navigate home when the trip is removed", () => {
+    mockIsRemoved = true;
+
+    render(<Trip />, { wrapper: ToastProvider });
+
+    expect(router.navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("should not navigate home while the trip exists", () => {
+    render(<Trip />, { wrapper: ToastProvider });
+
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 
   it("should show an error when updating the trip fails", async () => {

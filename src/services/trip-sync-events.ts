@@ -37,3 +37,26 @@ export function notifyTripDataUpdated(tripId: string) {
     queueMicrotask(flushNotifications);
   }
 }
+
+const removalListeners = new Map<string, Set<TripSyncListener>>();
+
+export function subscribeTripRemoved(
+  tripId: string,
+  listener: TripSyncListener,
+) {
+  if (!removalListeners.has(tripId)) {
+    removalListeners.set(tripId, new Set());
+  }
+
+  removalListeners.get(tripId)!.add(listener);
+
+  return () => {
+    removalListeners.get(tripId)?.delete(listener);
+  };
+}
+
+export function notifyTripRemoved(tripIds: string[]) {
+  for (const tripId of new Set(tripIds)) {
+    removalListeners.get(tripId)?.forEach((listener) => listener());
+  }
+}

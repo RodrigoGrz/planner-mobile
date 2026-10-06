@@ -2,7 +2,10 @@ import { useNetwork } from "@/contexts/NetworkContext";
 import { useLoadGeneration } from "@/hooks/useLoadGeneration";
 import { hasSynced } from "@/database/has-synced";
 import { getTripById } from "@/repositories/trip-repository";
-import { subscribeTripDataUpdated } from "@/services/trip-sync-events";
+import {
+  subscribeTripDataUpdated,
+  subscribeTripRemoved,
+} from "@/services/trip-sync-events";
 import { TripByID } from "@/server/trip-server";
 import { DataStatus } from "@/types/data-status";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -12,6 +15,7 @@ export function useTrip(tripId: string | undefined) {
   const { beginLoad, isCurrentLoad } = useLoadGeneration();
   const [trip, setTrip] = useState<TripByID | null>(null);
   const [status, setStatus] = useState<DataStatus>("loading");
+  const [isRemoved, setIsRemoved] = useState(false);
   const hasCacheRef = useRef(false);
 
   const loadLocal = useCallback(async () => {
@@ -70,5 +74,19 @@ export function useTrip(tripId: string | undefined) {
     });
   }, [tripId, refresh]);
 
-  return { trip, status, refresh };
+  useEffect(() => {
+    setIsRemoved(false);
+
+    if (!tripId) {
+      return;
+    }
+
+    return subscribeTripRemoved(tripId, () => {
+      beginLoad();
+      setTrip(null);
+      setIsRemoved(true);
+    });
+  }, [tripId, beginLoad]);
+
+  return { trip, status, refresh, isRemoved };
 }

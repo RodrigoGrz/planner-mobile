@@ -1,11 +1,13 @@
 import { useAuth } from "@/hooks/useAuth";
 import { useNetwork } from "@/contexts/NetworkContext";
+import { useToast } from "@/contexts/ToastContext";
 import {
   getIsSyncing,
   getSyncCounts,
   retryFailedSync,
   runInitialSyncIfOnline,
   runSyncOnReconnect,
+  subscribeSyncFailure,
   subscribeSyncStatus,
 } from "@/services/sync-engine";
 import { setMutationOnlineChecker } from "@/services/mutation-service";
@@ -37,6 +39,7 @@ type SyncProviderProps = {
 export function SyncProvider({ children }: SyncProviderProps) {
   const { user } = useAuth();
   const { isOnline, registerReconnectCallback } = useNetwork();
+  const { showErrorMessage } = useToast();
   const [pendingCount, setPendingCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
   const [syncingCount, setSyncingCount] = useState(0);
@@ -66,6 +69,12 @@ export function SyncProvider({ children }: SyncProviderProps) {
       void refreshCounts();
     });
   }, [refreshCounts]);
+
+  useEffect(() => {
+    return subscribeSyncFailure(({ message }) => {
+      showErrorMessage(message);
+    });
+  }, [showErrorMessage]);
 
   useEffect(() => {
     if (!user || !isOnline) {

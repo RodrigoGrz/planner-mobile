@@ -5,6 +5,13 @@ export const ERROR_MESSAGES = {
   invalidFields: (fields: string[]) =>
     `Verifique os campos: ${fields.join(", ")}.`,
   invalidData: "Verifique os dados informados.",
+  forbidden: "Você não tem permissão para alterar esta viagem.",
+  tripGone: "Esta viagem não existe mais e foi removida do aparelho.",
+  rateLimited: "Muitas requisições, tentando novamente em instantes.",
+  fileTooLarge: "A imagem é grande demais.",
+  syncFailed: "Não foi possível sincronizar uma alteração.",
+  syncFailures: (count: number) =>
+    `${count} alterações não puderam ser sincronizadas.`,
 } as const;
 
 export const FIELD_LABELS: Record<string, string> = {

@@ -33,6 +33,7 @@ import {
   markTripSyncFailed,
   markTripSyncing,
   overwriteTripFromServer,
+  removeTripLocally,
   resetTripSyncStatus,
   resolveLocalTripId,
   resolveRemoteId,
@@ -42,30 +43,44 @@ import { activitiesServer } from "@/server/activities-server";
 import { linksServer } from "@/server/links-server";
 import { tripServer } from "@/server/trip-server";
 import { coalesceQueueItems } from "@/services/queue-coalescer";
+import { classifySyncError } from "@/services/sync-error-classifier";
 import {
   syncActivities,
   syncTravelerTrips,
   syncTripDetail,
   syncTripDetails,
 } from "@/services/sync-service";
-import { notifyTripDataUpdated } from "@/services/trip-sync-events";
+import {
+  notifyTripDataUpdated,
+  notifyTripRemoved,
+} from "@/services/trip-sync-events";
 import {
   ActivityCreatePayload,
   CoalescedQueueItem,
   LinkCreatePayload,
+  SyncQueueItem,
   TripCreatePayload,
   TripImagePayload,
   TripUpdatePayload,
 } from "@/types/sync";
-import { getErrorStatus } from "@/utils/app-error";
+import { ERROR_MESSAGES } from "@/utils/error-messages";
 import { logger } from "@/utils/logger";
 
 const MAX_RETRIES = 5;
 const BASE_RETRY_DELAY_MS = 1000;
+const TRIP_RELOAD_STATUSES = [403, 422];
+
+type SyncFailureListener = (event: { message: string }) => void;
+
+type ProcessResult = { rejectedMessage?: string } | undefined;
+
+type FailureOutcome = "stop" | "progressed" | "pending";
 
 let isSyncing = false;
+let queueRunTimer: ReturnType<typeof setTimeout> | null = null;
 const syncStatusListeners = new Set<() => void>();
 const syncCompleteListeners = new Set<() => void>();
+const syncFailureListeners = new Set<SyncFailureListener>();
 
 function notifySyncStatusChange() {
   syncStatusListeners.forEach((listener) => listener());
@@ -89,6 +104,43 @@ export function subscribeSyncComplete(listener: () => void) {
   };
 }
 
+export function subscribeSyncFailure(listener: SyncFailureListener) {
+  syncFailureListeners.add(listener);
+  return () => {
+    syncFailureListeners.delete(listener);
+  };
+}
+
+function notifySyncFailures(messages: string[]) {
+  if (messages.length === 0) {
+    return;
+  }
+
+  const message =
+    messages.length === 1
+      ? messages[0]
+      : ERROR_MESSAGES.syncFailures(messages.length);
+
+  syncFailureListeners.forEach((listener) => listener({ message }));
+}
+
+function scheduleQueueRun(delayMs: number) {
+  if (queueRunTimer) {
+    clearTimeout(queueRunTimer);
+  }
+
+  queueRunTimer = setTimeout(() => {
+    queueRunTimer = null;
+
+    if (isSyncing) {
+      scheduleQueueRun(BASE_RETRY_DELAY_MS);
+      return;
+    }
+
+    void processSyncQueue();
+  }, delayMs);
+}
+
 export function getIsSyncing() {
   return isSyncing;
 }
@@ -107,20 +159,12 @@ function getRetryDelay(retryCount: number) {
   return BASE_RETRY_DELAY_MS * 2 ** retryCount;
 }
 
-function getNextRetryAt(retryCount: number) {
-  return new Date(Date.now() + getRetryDelay(retryCount)).toISOString();
+function getRetryAtAfter(delayMs: number) {
+  return new Date(Date.now() + delayMs).toISOString();
 }
 
-function getErrorMessage(error: unknown) {
-  if (getErrorStatus(error) === 401) {
-    return "AUTH_ERROR";
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unknown synchronization error";
+function getNextRetryAt(retryCount: number) {
+  return getRetryAtAfter(getRetryDelay(retryCount));
 }
 
 async function isItemReady(item: CoalescedQueueItem) {
@@ -163,7 +207,9 @@ async function processTripCreate(item: CoalescedQueueItem) {
   notifyTripDataUpdated(response.tripId);
 }
 
-async function processTripUpdate(item: CoalescedQueueItem) {
+async function processTripUpdate(
+  item: CoalescedQueueItem,
+): Promise<ProcessResult> {
   const payload = item.payload as TripUpdatePayload;
   const remoteTripId = await resolveRemoteId(item.entityId);
 
@@ -180,15 +226,49 @@ async function processTripUpdate(item: CoalescedQueueItem) {
     await updateTripRemoteIdAfterSync(item.entityId, remoteTripId);
     notifyTripDataUpdated(item.entityId);
   } catch (error) {
-    if (getErrorStatus(error) === 409) {
-      const serverTrip = await tripServer.getById(remoteTripId);
-      await overwriteTripFromServer(serverTrip);
-      notifyTripDataUpdated(item.entityId);
-      return;
+    const classification = classifySyncError(error);
+
+    if (
+      classification.kind !== "permanent" ||
+      !TRIP_RELOAD_STATUSES.includes(classification.status ?? 0)
+    ) {
+      throw error;
     }
 
-    throw error;
+    try {
+      const serverTrip = await tripServer.getById(remoteTripId);
+      await overwriteTripFromServer(serverTrip);
+    } catch (reloadError) {
+      logger.warn("Reload trip after rejected update failed:", reloadError);
+      throw error;
+    }
+
+    notifyTripDataUpdated(item.entityId);
+    return { rejectedMessage: classification.message };
   }
+}
+
+function getItemTripId(item: CoalescedQueueItem) {
+  if (item.entityType === "trip") {
+    return item.entityId;
+  }
+
+  return (item.payload as { tripId: string }).tripId;
+}
+
+async function removeGoneTrip(item: CoalescedQueueItem) {
+  const tripId = getItemTripId(item);
+  const localTripId = await resolveLocalTripId(tripId);
+
+  if (!(await getStoredRemoteId(localTripId))) {
+    return false;
+  }
+
+  const removedTripIds = await removeTripLocally(tripId);
+  notifyTripRemoved(removedTripIds);
+  removedTripIds.forEach(notifyTripDataUpdated);
+
+  return true;
 }
 
 function reconcileTripAfterMissingId(
@@ -263,15 +343,16 @@ async function processTripImage(item: CoalescedQueueItem) {
   notifyTripDataUpdated(payload.tripId);
 }
 
-async function processCoalescedItem(item: CoalescedQueueItem) {
+async function processCoalescedItem(
+  item: CoalescedQueueItem,
+): Promise<ProcessResult> {
   switch (item.entityType) {
     case "trip":
       if (item.operation === "create") {
         await processTripCreate(item);
-      } else {
-        await processTripUpdate(item);
+        break;
       }
-      break;
+      return processTripUpdate(item);
     case "activity":
       await processActivityCreate(item);
       break;
@@ -377,6 +458,88 @@ export async function pullSyncTripData(tripId: string) {
   }
 }
 
+function getPreviousRetryCount(queueItems: SyncQueueItem[], queueId: string) {
+  return queueItems.find((entry) => entry.id === queueId)?.retryCount ?? 0;
+}
+
+async function handleItemFailure(
+  item: CoalescedQueueItem,
+  error: unknown,
+  queueItems: SyncQueueItem[],
+  failureMessages: string[],
+): Promise<FailureOutcome> {
+  const classification = classifySyncError(error);
+  logger.warn(`Sync ${item.entityType} ${item.operation} failed:`, error);
+
+  if (classification.kind === "auth") {
+    for (const queueId of item.sourceQueueIds) {
+      await markQueueItemFailed(
+        queueId,
+        classification.message,
+        getPreviousRetryCount(queueItems, queueId) + 1,
+        null,
+      );
+    }
+
+    await markEntityFailed(item, classification.message);
+    return "stop";
+  }
+
+  if (classification.kind === "not_found" && (await removeGoneTrip(item))) {
+    failureMessages.push(ERROR_MESSAGES.tripGone);
+    return "progressed";
+  }
+
+  if (classification.kind === "rate_limited") {
+    const retryCounts = item.sourceQueueIds.map((queueId) =>
+      getPreviousRetryCount(queueItems, queueId),
+    );
+    const delayMs = Math.max(
+      classification.retryAfterMs ?? getRetryDelay(Math.max(...retryCounts)),
+      BASE_RETRY_DELAY_MS,
+    );
+    const retryAt = getRetryAtAfter(delayMs);
+
+    for (const [index, queueId] of item.sourceQueueIds.entries()) {
+      await markQueueItemFailed(
+        queueId,
+        classification.message,
+        retryCounts[index],
+        retryAt,
+      );
+    }
+
+    await resetEntityStatusToPending(item);
+    scheduleQueueRun(delayMs);
+    return "stop";
+  }
+
+  let failedForGood = false;
+
+  for (const queueId of item.sourceQueueIds) {
+    const retryCount = getPreviousRetryCount(queueItems, queueId) + 1;
+    const exhausted =
+      classification.kind !== "retryable" || retryCount >= MAX_RETRIES;
+
+    failedForGood ||= exhausted;
+    await markQueueItemFailed(
+      queueId,
+      classification.message,
+      retryCount,
+      exhausted ? null : getNextRetryAt(retryCount),
+    );
+  }
+
+  if (failedForGood) {
+    await markEntityFailed(item, classification.message);
+    failureMessages.push(classification.message);
+  } else {
+    await resetEntityStatusToPending(item);
+  }
+
+  return "pending";
+}
+
 export async function processSyncQueue() {
   if (isSyncing) {
     return;
@@ -384,6 +547,8 @@ export async function processSyncQueue() {
 
   isSyncing = true;
   notifySyncStatusChange();
+
+  const failureMessages: string[] = [];
 
   try {
     await resetStaleSyncingItems();
@@ -404,39 +569,28 @@ export async function processSyncQueue() {
         }
 
         try {
-          await processCoalescedItem(item);
+          const result = await processCoalescedItem(item);
           await removeQueueItems(item.sourceQueueIds);
+
+          if (result?.rejectedMessage) {
+            failureMessages.push(result.rejectedMessage);
+          }
+
           progressed = true;
         } catch (error) {
-          const errorMessage = getErrorMessage(error);
+          const outcome = await handleItemFailure(
+            item,
+            error,
+            queueItems,
+            failureMessages,
+          );
 
-          if (errorMessage === "AUTH_ERROR") {
-            for (const queueId of item.sourceQueueIds) {
-              const queueItem = queueItems.find((entry) => entry.id === queueId);
-              const retryCount = (queueItem?.retryCount ?? 0) + 1;
-              await markQueueItemFailed(queueId, errorMessage, retryCount, null);
-            }
-
-            await markEntityFailed(item, errorMessage);
+          if (outcome === "stop") {
             return;
           }
 
-          for (const queueId of item.sourceQueueIds) {
-            const queueItem = queueItems.find((entry) => entry.id === queueId);
-            const retryCount = (queueItem?.retryCount ?? 0) + 1;
-
-            if (retryCount >= MAX_RETRIES) {
-              await markQueueItemFailed(queueId, errorMessage, retryCount, null);
-              await markEntityFailed(item, errorMessage);
-            } else {
-              await markQueueItemFailed(
-                queueId,
-                errorMessage,
-                retryCount,
-                getNextRetryAt(retryCount),
-              );
-              await resetEntityStatusToPending(item);
-            }
+          if (outcome === "progressed") {
+            progressed = true;
           }
         }
       }
@@ -459,6 +613,7 @@ export async function processSyncQueue() {
     isSyncing = false;
     notifySyncStatusChange();
     notifySyncComplete();
+    notifySyncFailures(failureMessages);
   }
 }
 

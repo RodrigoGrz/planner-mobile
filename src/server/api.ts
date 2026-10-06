@@ -74,6 +74,24 @@ function readFieldErrors(data: unknown): FieldErrors | undefined {
   return errors as FieldErrors;
 }
 
+function parseRetryAfter(value: unknown, now = Date.now()) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return undefined;
+  }
+
+  if (/^\d+$/.test(value.trim())) {
+    return Number(value.trim()) * 1000;
+  }
+
+  const retryAt = Date.parse(value);
+
+  if (Number.isNaN(retryAt)) {
+    return undefined;
+  }
+
+  return Math.max(retryAt - now, 0);
+}
+
 function toAppError(requestError: AxiosError) {
   const { response } = requestError;
 
@@ -89,6 +107,10 @@ function toAppError(requestError: AxiosError) {
     cause: requestError,
     fieldErrors:
       response.status === 400 ? readFieldErrors(response.data) : undefined,
+    retryAfterMs:
+      response.status === 429
+        ? parseRetryAfter(response.headers?.["retry-after"])
+        : undefined,
   });
 }
 

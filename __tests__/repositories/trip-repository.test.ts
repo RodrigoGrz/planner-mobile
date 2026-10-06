@@ -1,5 +1,6 @@
 import {
   getTravelerTrips,
+  removeTripLocally,
   setNextTripId,
   upsertTravelerTrips,
   upsertTripDetail,
@@ -105,5 +106,92 @@ describe("trip-repository", () => {
       expect.stringContaining("INSERT INTO trips"),
       expect.arrayContaining(["t1", "Paris"]),
     );
+  });
+
+  describe("removeTripLocally", () => {
+    function deleteCallFor(table: string) {
+      return mockRunAsync.mock.calls.find(([sql]) =>
+        (sql as string).includes(`DELETE FROM ${table}`),
+      );
+    }
+
+    it("should remove the trip, its children, metadata and queue items in one transaction", async () => {
+      mockGetFirstAsync.mockResolvedValue(null);
+      mockWithTransactionAsync.mockImplementationOnce(async (callback) => {
+        expect(mockRunAsync).not.toHaveBeenCalled();
+        await callback();
+      });
+
+      const removedIds = await removeTripLocally("t1");
+
+      expect(removedIds).toEqual(["t1"]);
+      expect(mockWithTransactionAsync).toHaveBeenCalledTimes(1);
+      for (const table of [
+        "activities",
+        "links",
+        "participants",
+        "traveler_trips",
+        "trips",
+        "sync_metadata",
+        "sync_queue",
+      ]) {
+        expect(deleteCallFor(table)?.[1]).toEqual(expect.arrayContaining(["t1"]));
+      }
+    });
+
+    it("should remove the trip by every resolved id", async () => {
+      mockGetFirstAsync.mockImplementation(async (sql: string, params: string[]) => {
+        if (sql.includes("sync_metadata") && params[0] === "trip_alias:local-1") {
+          return { value: "remote-1" };
+        }
+
+        return null;
+      });
+
+      const removedIds = await removeTripLocally("local-1");
+
+      expect(removedIds).toEqual(expect.arrayContaining(["local-1", "remote-1"]));
+      expect(deleteCallFor("trips")?.[1]).toEqual(
+        expect.arrayContaining(["local-1", "remote-1"]),
+      );
+      expect(deleteCallFor("activities")?.[1]).toEqual(
+        expect.arrayContaining(["local-1", "remote-1"]),
+      );
+      expect(deleteCallFor("sync_metadata")?.[1]).toEqual(
+        expect.arrayContaining([
+          "trip:local-1",
+          "trip:remote-1",
+          "trip_alias:local-1",
+          "trip_alias:remote-1",
+          "activities:local-1",
+          "activities:remote-1",
+          "links:local-1",
+          "links:remote-1",
+          "participants:local-1",
+          "participants:remote-1",
+        ]),
+      );
+    });
+
+    it("should remove queue items by entity, dependency and payload trip id", async () => {
+      mockGetFirstAsync.mockResolvedValue(null);
+
+      await removeTripLocally("t1");
+
+      const [sql] = deleteCallFor("sync_queue") ?? [];
+      expect(sql).toContain("entity_id IN");
+      expect(sql).toContain("depends_on_entity_id IN");
+      expect(sql).toContain("json_extract(payload, '$.tripId') IN");
+    });
+
+    it("should clear next_trip_id when it points to the removed trip", async () => {
+      mockGetFirstAsync.mockResolvedValue(null);
+
+      await removeTripLocally("t1");
+
+      const [sql] = deleteCallFor("sync_metadata") ?? [];
+      expect(sql).toContain("key = 'next_trip_id'");
+      expect(sql).toContain("key LIKE 'trip_alias:%'");
+    });
   });
 });
