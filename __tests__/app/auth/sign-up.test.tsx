@@ -75,6 +75,13 @@ jest.mock("@/utils/make-phone", () => ({
   maskPhone: jest.fn((v) => v),
 }));
 
+function fillValidForm() {
+  fireEvent.changeText(screen.getByPlaceholderText("Nome"), "Rodrigo");
+  fireEvent.changeText(screen.getByPlaceholderText("E-mail"), "test@mail.com");
+  fireEvent.changeText(screen.getByPlaceholderText("Senha"), "12345678");
+  fireEvent.changeText(screen.getByPlaceholderText("Telefone"), "(67) 99999-9999");
+}
+
 describe("SignUp", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -100,13 +107,7 @@ describe("SignUp", () => {
 
     render(<SignUp />, { wrapper: ToastProvider });
 
-    fireEvent.changeText(screen.getByPlaceholderText("Nome"), "Rodrigo");
-    fireEvent.changeText(
-      screen.getByPlaceholderText("E-mail"),
-      "test@mail.com",
-    );
-    fireEvent.changeText(screen.getByPlaceholderText("Senha"), "123456");
-    fireEvent.changeText(screen.getByPlaceholderText("Telefone"), "99999999");
+    fillValidForm();
 
     fireEvent.press(screen.getByText("Registrar"));
 
@@ -114,8 +115,8 @@ describe("SignUp", () => {
       expect(registerMock).toHaveBeenCalledWith({
         name: "Rodrigo",
         email: "test@mail.com",
-        password: "123456",
-        phone: "99999999",
+        password: "12345678",
+        phone: "(67) 99999-9999",
       });
     });
 
@@ -130,8 +131,80 @@ describe("SignUp", () => {
 
     render(<SignUp />, { wrapper: ToastProvider });
 
+    fillValidForm();
     fireEvent.press(screen.getByText("Registrar"));
   }
+
+  function submitForm(values: Partial<Record<"Nome" | "E-mail" | "Senha" | "Telefone", string>>) {
+    const registerMock = jest
+      .spyOn(registerServer, "registerTraveler")
+      .mockResolvedValue({} as any);
+
+    render(<SignUp />, { wrapper: ToastProvider });
+
+    fillValidForm();
+    for (const [placeholder, value] of Object.entries(values)) {
+      fireEvent.changeText(screen.getByPlaceholderText(placeholder), value);
+    }
+    fireEvent.press(screen.getByText("Registrar"));
+
+    return registerMock;
+  }
+
+  it("should not register with a password shorter than 8 characters", async () => {
+    const registerMock = submitForm({ Senha: "1234567" });
+
+    expect(
+      await screen.findByText("A senha deve ter entre 8 caracteres e 72 bytes."),
+    ).toBeTruthy();
+    expect(registerMock).not.toHaveBeenCalled();
+  });
+
+  it("should not register with an invalid phone", async () => {
+    const registerMock = submitForm({ Telefone: "99999999" });
+
+    expect(
+      await screen.findByText("Informe um telefone válido, com DDD."),
+    ).toBeTruthy();
+    expect(registerMock).not.toHaveBeenCalled();
+  });
+
+  it("should not register with a name shorter than 3 characters", async () => {
+    const registerMock = submitForm({ Nome: "Ro" });
+
+    expect(
+      await screen.findByText("O nome deve ter entre 3 e 100 caracteres."),
+    ).toBeTruthy();
+    expect(registerMock).not.toHaveBeenCalled();
+  });
+
+  it("should not register with an invalid e-mail", async () => {
+    const registerMock = submitForm({ "E-mail": "test@" });
+
+    expect(await screen.findByText("E-mail inválido.")).toBeTruthy();
+    expect(registerMock).not.toHaveBeenCalled();
+  });
+
+  it("should register with the trimmed name and normalized e-mail", async () => {
+    const registerMock = submitForm({
+      Nome: "  Rodrigo  ",
+      "E-mail": "  Test@Mail.COM ",
+    });
+
+    await waitFor(() => {
+      expect(registerMock).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Rodrigo", email: "test@mail.com" }),
+      );
+    });
+  });
+
+  it("should limit the inputs to the api sizes", () => {
+    render(<SignUp />, { wrapper: ToastProvider });
+
+    expect(screen.getByPlaceholderText("Nome").props.maxLength).toBe(100);
+    expect(screen.getByPlaceholderText("E-mail").props.maxLength).toBe(254);
+    expect(screen.getByPlaceholderText("Telefone").props.maxLength).toBe(20);
+  });
 
   it("should show an error toast with the fallback when register fails", async () => {
     submitRegisterRejectingWith(new Error("Erro fake"));

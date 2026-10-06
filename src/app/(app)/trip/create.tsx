@@ -1,4 +1,10 @@
-import { validateInput } from "@/utils/validateInput";
+import {
+  MAX_DESTINATION_LENGTH,
+  MAX_EMAIL_LENGTH,
+  MAX_INVITES,
+  validateInput,
+} from "@/utils/validateInput";
+import { ERROR_MESSAGES } from "@/utils/error-messages";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { Alert, Image, Keyboard, Text, View } from "react-native";
@@ -29,7 +35,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
-import { getLocalTodayString } from "@/utils/trip-dates";
+import { exceedsMaxTripDuration, getLocalTodayString } from "@/utils/trip-dates";
 import { calendarPermission } from "@/utils/toggle/calendar-permission";
 import { syncTripWithCalendar } from "@/utils/toggle/calendar-sync";
 import { router } from "expo-router";
@@ -74,8 +80,17 @@ export default function Create() {
       );
     }
 
-    if (destination.length < 4) {
-      return showErrorMessage("O destino deve ter pelo menos 4 caracteres.");
+    if (!validateInput.destination(destination)) {
+      return showErrorMessage(ERROR_MESSAGES.invalidDestination);
+    }
+
+    if (
+      exceedsMaxTripDuration(
+        selectedDates.startsAt.dateString,
+        selectedDates.endsAt.dateString,
+      )
+    ) {
+      return showErrorMessage(ERROR_MESSAGES.tripTooLong);
     }
 
     if (stepForm === StepForm.TRIP_DETAILS) {
@@ -111,19 +126,21 @@ export default function Create() {
   }
 
   function handleAddEmail() {
-    if (!validateInput.email(emailToInvite)) {
-      return showErrorMessage("E-mail inválido.");
+    const normalizedEmail = validateInput.normalizeEmail(emailToInvite);
+
+    if (!validateInput.email(normalizedEmail)) {
+      return showErrorMessage(ERROR_MESSAGES.invalidEmail);
     }
 
-    const emailAlreadyExists = emailsToInvite.find(
-      (email) => email === emailToInvite,
-    );
-
-    if (emailAlreadyExists) {
-      return showErrorMessage("E-mail já foi adicionado.");
+    if (emailsToInvite.includes(normalizedEmail)) {
+      return showErrorMessage(ERROR_MESSAGES.duplicatedInvite);
     }
 
-    setEmailsToInvite((prevState) => [...prevState, emailToInvite]);
+    if (emailsToInvite.length >= MAX_INVITES) {
+      return showErrorMessage(ERROR_MESSAGES.tooManyInvites);
+    }
+
+    setEmailsToInvite((prevState) => [...prevState, normalizedEmail]);
     setEmailToInvite("");
   }
 
@@ -149,7 +166,7 @@ export default function Create() {
 
     try {
       await syncTripWithCalendar({
-        destination,
+        destination: destination.trim(),
         startsAt: selectedDates.startsAt.dateString,
         endsAt: selectedDates.endsAt.dateString,
       });
@@ -164,7 +181,7 @@ export default function Create() {
       setIsCreatingTrip(true);
 
       const { localId } = await mutationService.createTrip({
-        destination,
+        destination: destination.trim(),
         startsAt: selectedDates.startsAt?.dateString ?? "",
         endsAt: selectedDates.endsAt?.dateString ?? "",
         emailsToInvite: emailsToInvite,
@@ -233,6 +250,7 @@ export default function Create() {
             editable={stepForm === StepForm.TRIP_DETAILS}
             onChangeText={setDestination}
             value={destination}
+            maxLength={MAX_DESTINATION_LENGTH}
           />
         </Input>
 
@@ -403,6 +421,7 @@ export default function Create() {
                 setEmailToInvite(text.toLocaleLowerCase())
               }
               value={emailToInvite}
+              maxLength={MAX_EMAIL_LENGTH}
               returnKeyType="send"
               onSubmitEditing={handleAddEmail}
             />

@@ -38,11 +38,13 @@ jest.mock("@/utils/toggle/calendar-sync", () => ({
   syncTripWithCalendar: jest.fn(),
 }));
 
+let mockPeriod = { startsAt: "2030-10-01", endsAt: "2030-10-05" };
+
 jest.mock("@/utils/calendarUtils", () => ({
   calendarUtils: {
     orderStartsAtAndEndsAt: () => ({
-      startsAt: { dateString: "2030-10-01" },
-      endsAt: { dateString: "2030-10-05" },
+      startsAt: { dateString: mockPeriod.startsAt },
+      endsAt: { dateString: mockPeriod.endsAt },
       formatDatesInText: "1 a 5 de outubro",
       dates: {},
     }),
@@ -132,25 +134,42 @@ function confirmAlertsAutomatically() {
     });
 }
 
-function fillTripDetails() {
-  fireEvent.changeText(screen.getByPlaceholderText("Para onde?"), "Paris");
+function fillTripDetails(destination = "Paris") {
+  fireEvent.changeText(screen.getByPlaceholderText("Para onde?"), destination);
   fireEvent(screen.getByPlaceholderText("Quando?"), "pressIn");
   fireEvent.press(screen.getByText("pick-day"));
   fireEvent.press(screen.getByText("Confirmar"));
 }
 
-function submitNewTrip() {
+function submitNewTrip(destination = "Paris") {
+  render(<Create />, { wrapper: ToastProvider });
+
+  fillTripDetails(destination);
+  fireEvent.press(screen.getByText("Continuar"));
+  fireEvent.press(screen.getByText("Confirmar Viagem"));
+}
+
+function openInviteModal() {
   render(<Create />, { wrapper: ToastProvider });
 
   fillTripDetails();
   fireEvent.press(screen.getByText("Continuar"));
-  fireEvent.press(screen.getByText("Confirmar Viagem"));
+  fireEvent(screen.getByPlaceholderText("Quem estará na viagem?"), "pressIn");
+}
+
+function inviteGuest(email: string) {
+  fireEvent.changeText(
+    screen.getByPlaceholderText("Digite o e-mail do convidado"),
+    email,
+  );
+  fireEvent.press(screen.getByText("Convidar"));
 }
 
 describe("Create", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsOnline = true;
+    mockPeriod = { startsAt: "2030-10-01", endsAt: "2030-10-05" };
     confirmAlertsAutomatically();
     (mutationService.createTrip as jest.Mock).mockResolvedValue({
       localId: "trip-local-1",
@@ -254,6 +273,104 @@ describe("Create", () => {
       ),
     ).toBeTruthy();
     expect(router.navigate).toHaveBeenCalledWith("/trip/trip-local-1");
+  });
+
+  it("should reject a destination shorter than 3 characters", async () => {
+    render(<Create />, { wrapper: ToastProvider });
+
+    fillTripDetails("Ri");
+    fireEvent.press(screen.getByText("Continuar"));
+
+    expect(
+      await screen.findByText("O destino deve ter entre 3 e 100 caracteres."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Confirmar Viagem")).toBeNull();
+  });
+
+  it("should accept a destination with 3 characters", async () => {
+    submitNewTrip("Rio");
+
+    expect(await screen.findByText("Viagem criada com sucesso!")).toBeTruthy();
+    expect(mutationService.createTrip).toHaveBeenCalledWith(
+      expect.objectContaining({ destination: "Rio" }),
+    );
+  });
+
+  it("should send the trimmed destination", async () => {
+    submitNewTrip("  Paris  ");
+
+    expect(await screen.findByText("Viagem criada com sucesso!")).toBeTruthy();
+    expect(mutationService.createTrip).toHaveBeenCalledWith(
+      expect.objectContaining({ destination: "Paris" }),
+    );
+  });
+
+  it("should sync the trimmed destination with the device calendar", async () => {
+    (syncTripWithCalendar as jest.Mock).mockResolvedValue(undefined);
+    render(<Create />, { wrapper: ToastProvider });
+
+    fireEvent.press(screen.getByText("Sincronizar com o calendário"));
+    await screen.findByText("Sincronizar com o calendário");
+
+    fillTripDetails("  Paris  ");
+    fireEvent.press(screen.getByText("Continuar"));
+    fireEvent.press(screen.getByText("Confirmar Viagem"));
+
+    expect(await screen.findByText("Viagem criada com sucesso!")).toBeTruthy();
+    expect(syncTripWithCalendar).toHaveBeenCalledWith(
+      expect.objectContaining({ destination: "Paris" }),
+    );
+  });
+
+  it("should limit the destination input to 100 characters", () => {
+    render(<Create />, { wrapper: ToastProvider });
+
+    expect(screen.getByPlaceholderText("Para onde?").props.maxLength).toBe(100);
+  });
+
+  it("should reject a trip longer than 30 days", async () => {
+    mockPeriod = { startsAt: "2030-10-01", endsAt: "2030-11-01" };
+    render(<Create />, { wrapper: ToastProvider });
+
+    fillTripDetails();
+    fireEvent.press(screen.getByText("Continuar"));
+
+    expect(
+      await screen.findByText("A viagem pode ter no máximo 30 dias."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Confirmar Viagem")).toBeNull();
+  });
+
+  it("should invite the normalized e-mail", async () => {
+    openInviteModal();
+    inviteGuest(" Ana@Example.com ");
+    fireEvent.press(screen.getByText("Confirmar Viagem"));
+
+    expect(await screen.findByText("Viagem criada com sucesso!")).toBeTruthy();
+    expect(mutationService.createTrip).toHaveBeenCalledWith(
+      expect.objectContaining({ emailsToInvite: ["ana@example.com"] }),
+    );
+  });
+
+  it("should treat invite e-mails with different case and spaces as duplicates", async () => {
+    openInviteModal();
+    inviteGuest("ana@example.com");
+    inviteGuest("  ANA@Example.com ");
+
+    expect(await screen.findByText("E-mail já foi adicionado.")).toBeTruthy();
+  });
+
+  it("should not allow more than 20 invites", async () => {
+    openInviteModal();
+
+    for (let index = 1; index <= 20; index += 1) {
+      inviteGuest(`guest${index}@example.com`);
+    }
+    inviteGuest("guest21@example.com");
+
+    expect(
+      await screen.findByText("Você pode convidar até 20 pessoas por viagem."),
+    ).toBeTruthy();
   });
 
   it("should show an invalid email error when inviting a guest", async () => {

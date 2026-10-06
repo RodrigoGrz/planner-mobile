@@ -9,8 +9,13 @@ import { useToast } from "@/contexts/ToastContext";
 import { useTripDetails } from "@/hooks/useTripDetails";
 import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
+import { ERROR_MESSAGES } from "@/utils/error-messages";
 import { logger } from "@/utils/logger";
-import { validateInput } from "@/utils/validateInput";
+import {
+  MAX_TITLE_LENGTH,
+  MAX_URL_LENGTH,
+  validateInput,
+} from "@/utils/validateInput";
 import { Plus } from "lucide-react-native";
 import { useState } from "react";
 import { FlatList, Text, View } from "react-native";
@@ -40,16 +45,20 @@ export function Details({ tripId }: DetailsProps) {
         return showErrorMessage("Informe um título para o link.");
       }
 
-      if (!validateInput.url(linkURL.trim())) {
-        return showErrorMessage("Link inválido.");
+      if (!validateInput.itemTitle(linkTitle)) {
+        return showErrorMessage(ERROR_MESSAGES.titleTooLong);
+      }
+
+      if (!validateInput.url(linkURL)) {
+        return showErrorMessage(ERROR_MESSAGES.invalidLink);
       }
 
       setIsCreatingLinkTrip(true);
 
       await mutationService.createLink({
         tripId,
-        title: linkTitle,
-        url: linkURL,
+        title: linkTitle.trim(),
+        url: linkURL.trim(),
       });
 
       if (isOnline) {
@@ -133,11 +142,16 @@ export function Details({ tripId }: DetailsProps) {
             <Input.Field
               placeholder="Título do link"
               onChangeText={setLinkTitle}
+              maxLength={MAX_TITLE_LENGTH}
             />
           </Input>
 
           <Input variant="secondary">
-            <Input.Field placeholder="URL" onChangeText={setLinkURL} />
+            <Input.Field
+              placeholder="URL"
+              onChangeText={setLinkURL}
+              maxLength={MAX_URL_LENGTH}
+            />
           </Input>
         </View>
 

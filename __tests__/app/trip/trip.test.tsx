@@ -73,9 +73,27 @@ jest.mock("react-native-safe-area-context", () => ({
 
 jest.mock("lucide-react-native", () => new Proxy({}, { get: () => () => null }));
 
-jest.mock("@/components/calendar", () => ({
-  Calendar: () => null,
-}));
+let mockCalendarProps: Record<string, unknown> = {};
+
+jest.mock("@/components/calendar", () => {
+  const { Text, TouchableOpacity } = require("react-native");
+
+  return {
+    Calendar: (props: any) => {
+      mockCalendarProps = props;
+
+      return (
+        <TouchableOpacity
+          onPress={() => props.onDayPress({ dateString: "2030-10-02" })}
+        >
+          <Text>pick-day</Text>
+        </TouchableOpacity>
+      );
+    },
+  };
+});
+
+let mockSelectedPeriod: { startsAt: string; endsAt: string } | null = null;
 
 jest.mock("@/utils/calendarUtils", () => {
   const { toTripDayString } = jest.requireActual("@/utils/trip-dates");
@@ -88,7 +106,12 @@ jest.mock("@/utils/calendarUtils", () => {
         formatDatesInText: "1 a 5 de outubro",
         dates: {},
       }),
-      orderStartsAtAndEndsAt: jest.fn(),
+      orderStartsAtAndEndsAt: () => ({
+        startsAt: { dateString: mockSelectedPeriod?.startsAt },
+        endsAt: { dateString: mockSelectedPeriod?.endsAt },
+        formatDatesInText: "período escolhido",
+        dates: {},
+      }),
       toCalendarDate: (value: string | Date) => ({
         dateString: toTripDayString(value),
       }),
@@ -135,14 +158,112 @@ function openUpdateForm() {
   fireEvent.press(screen.getByLabelText("Editar viagem"));
 }
 
+function selectNewPeriod(startsAt: string, endsAt: string) {
+  mockSelectedPeriod = { startsAt, endsAt };
+  fireEvent(screen.getByPlaceholderText("Quando?"), "pressIn");
+  fireEvent.press(screen.getByText("pick-day"));
+  fireEvent.press(screen.getByText("Confirmar"));
+}
+
+function duringTheTrip() {
+  jest.useFakeTimers({ now: new Date(2030, 9, 3, 10, 0, 0), advanceTimers: true });
+}
+
 describe("Trip", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsOnline = true;
     mockIsRemoved = false;
     mockIsInvitePending = false;
+    mockSelectedPeriod = null;
     mockSearchParams = { id: "trip-1" };
     jest.spyOn(Alert, "alert");
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  describe("editing an ongoing trip", () => {
+    beforeEach(() => {
+      duringTheTrip();
+      (mutationService.updateTrip as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it("should keep a past start date when updating an ongoing trip", async () => {
+      openUpdateForm();
+      fireEvent.press(screen.getByText("Atualizar"));
+
+      expect(await screen.findByText("Viagem atualizada com sucesso!")).toBeTruthy();
+      expect(mutationService.updateTrip).toHaveBeenCalledWith(
+        expect.objectContaining({ startsAt: "2030-10-01", endsAt: "2030-10-05" }),
+      );
+    });
+
+    it("should allow the current start date in the edit calendar", () => {
+      openUpdateForm();
+      fireEvent(screen.getByPlaceholderText("Quando?"), "pressIn");
+
+      expect(mockCalendarProps.minDate).toBe("2030-10-01");
+    });
+
+    it("should reject a new start date before today", async () => {
+      openUpdateForm();
+      selectNewPeriod("2030-10-02", "2030-10-06");
+      fireEvent.press(screen.getByText("Atualizar"));
+
+      expect(
+        await screen.findByText("A data de início não pode ser anterior a hoje."),
+      ).toBeTruthy();
+      expect(mutationService.updateTrip).not.toHaveBeenCalled();
+    });
+
+    it("should reject a new end date before today", async () => {
+      openUpdateForm();
+      selectNewPeriod("2030-10-01", "2030-10-02");
+      fireEvent.press(screen.getByText("Atualizar"));
+
+      expect(
+        await screen.findByText("A data de fim não pode ser anterior a hoje."),
+      ).toBeTruthy();
+      expect(mutationService.updateTrip).not.toHaveBeenCalled();
+    });
+
+    it("should reject an updated trip longer than 30 days", async () => {
+      openUpdateForm();
+      selectNewPeriod("2030-10-01", "2030-11-01");
+      fireEvent.press(screen.getByText("Atualizar"));
+
+      expect(
+        await screen.findByText("A viagem pode ter no máximo 30 dias."),
+      ).toBeTruthy();
+      expect(mutationService.updateTrip).not.toHaveBeenCalled();
+    });
+  });
+
+  it("should reject an updated destination shorter than 3 characters", async () => {
+    openUpdateForm();
+    fireEvent.changeText(screen.getByPlaceholderText("Para onde?"), "Ri");
+    fireEvent.press(screen.getByText("Atualizar"));
+
+    expect(
+      await screen.findByText("O destino deve ter entre 3 e 100 caracteres."),
+    ).toBeTruthy();
+    expect(mutationService.updateTrip).not.toHaveBeenCalled();
+  });
+
+  it("should send the trimmed updated destination", async () => {
+    (mutationService.updateTrip as jest.Mock).mockResolvedValue(undefined);
+
+    openUpdateForm();
+    fireEvent.changeText(screen.getByPlaceholderText("Para onde?"), "  Roma  ");
+    fireEvent.press(screen.getByText("Atualizar"));
+
+    expect(await screen.findByText("Viagem atualizada com sucesso!")).toBeTruthy();
+    expect(mutationService.updateTrip).toHaveBeenCalledWith(
+      expect.objectContaining({ destination: "Roma" }),
+    );
+    expect(screen.queryByPlaceholderText("Para onde?")).toBeNull();
   });
 
   it("should show the trip period without shifting the days", () => {

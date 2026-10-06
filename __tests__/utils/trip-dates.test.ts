@@ -1,5 +1,8 @@
 import {
+  MAX_TRIP_DURATION_IN_DAYS,
   compareTripDayWithToday,
+  exceedsMaxTripDuration,
+  getTripPeriodUpdateError,
   getLocalTodayString,
   isValidActivityHour,
   isWallClockPast,
@@ -88,6 +91,57 @@ describe("trip-dates in America/Sao_Paulo", () => {
         lastDayMorning,
       ),
     ).toBe("during");
+  });
+
+  it("should accept a trip of exactly 30 days", () => {
+    expect(exceedsMaxTripDuration("2026-10-01", "2026-10-31")).toBe(false);
+    expect(exceedsMaxTripDuration("2026-10-20", "2026-11-19")).toBe(false);
+  });
+
+  it("should reject a trip longer than 30 days", () => {
+    expect(exceedsMaxTripDuration("2026-10-01", "2026-11-01")).toBe(true);
+    expect(MAX_TRIP_DURATION_IN_DAYS).toBe(30);
+  });
+
+  describe("getTripPeriodUpdateError", () => {
+    const today = new Date(2030, 9, 3, 10, 0, 0);
+    const current = { currentStartsAt: "2030-10-01", currentEndsAt: "2030-10-05" };
+
+    it("should accept an unchanged start date in the past", () => {
+      expect(
+        getTripPeriodUpdateError(
+          { startsAt: "2030-10-01", endsAt: "2030-10-06", ...current },
+          today,
+        ),
+      ).toBeNull();
+    });
+
+    it("should reject a changed start date before today", () => {
+      expect(
+        getTripPeriodUpdateError(
+          { startsAt: "2030-10-02", endsAt: "2030-10-05", ...current },
+          today,
+        ),
+      ).toBe("A data de início não pode ser anterior a hoje.");
+    });
+
+    it("should reject a changed end date before today", () => {
+      expect(
+        getTripPeriodUpdateError(
+          { startsAt: "2030-10-01", endsAt: "2030-10-02", ...current },
+          today,
+        ),
+      ).toBe("A data de fim não pode ser anterior a hoje.");
+    });
+
+    it("should reject an updated period longer than 30 days", () => {
+      expect(
+        getTripPeriodUpdateError(
+          { startsAt: "2030-10-01", endsAt: "2030-11-01", ...current },
+          today,
+        ),
+      ).toBe("A viagem pode ter no máximo 30 dias.");
+    });
   });
 
   it("should be before and after the trip outside its days", () => {
