@@ -12,6 +12,12 @@ jest.mock("@/hooks/useTrips", () => ({
   useTrips: jest.fn(),
 }));
 
+let mockSyncCounts = { pendingCount: 0, failedCount: 0, syncingCount: 0 };
+
+jest.mock("@/contexts/SyncContext", () => ({
+  useSync: () => mockSyncCounts,
+}));
+
 jest.mock("@/components/loading", () => {
   const { ActivityIndicator } = require("react-native");
   return {
@@ -53,10 +59,71 @@ import Index from "@/app/(app)/index";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips } from "@/hooks/useTrips";
 import { router } from "expo-router";
+import { Alert, AlertButton } from "react-native";
+
+const UNSYNCED_SIGN_OUT_MESSAGE =
+  "Você tem 3 alteração(ões) não sincronizada(s). Se sair agora, elas serão perdidas.";
+
+function renderWithUnsyncedChanges() {
+  const signOutMock = jest.fn();
+  mockSyncCounts = { pendingCount: 1, failedCount: 1, syncingCount: 1 };
+  (useAuth as jest.Mock).mockReturnValue({ signOut: signOutMock });
+  (useTrips as jest.Mock).mockReturnValue({
+    trips: [],
+    nextTrip: null,
+    status: "ready",
+  });
+
+  render(<Index />);
+
+  return signOutMock;
+}
+
+function answerSignOutAlertWith(buttonText: string) {
+  jest
+    .spyOn(Alert, "alert")
+    .mockImplementation((_title, _message, buttons?: AlertButton[]) => {
+      buttons?.find((button) => button.text === buttonText)?.onPress?.();
+    });
+}
 
 describe("Index (Home)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
+    mockSyncCounts = { pendingCount: 0, failedCount: 0, syncingCount: 0 };
+  });
+
+  it("should ask for confirmation before signing out with unsynced changes", () => {
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const signOutMock = renderWithUnsyncedChanges();
+
+    fireEvent.press(screen.getByText("Sair"));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Sair",
+      UNSYNCED_SIGN_OUT_MESSAGE,
+      expect.any(Array),
+    );
+    expect(signOutMock).not.toHaveBeenCalled();
+  });
+
+  it("should sign out after confirming", () => {
+    answerSignOutAlertWith("Sair");
+    const signOutMock = renderWithUnsyncedChanges();
+
+    fireEvent.press(screen.getByText("Sair"));
+
+    expect(signOutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("should not sign out when the confirmation is cancelled", () => {
+    answerSignOutAlertWith("Cancelar");
+    const signOutMock = renderWithUnsyncedChanges();
+
+    fireEvent.press(screen.getByText("Sair"));
+
+    expect(signOutMock).not.toHaveBeenCalled();
   });
 
   it("should show loading initially", () => {

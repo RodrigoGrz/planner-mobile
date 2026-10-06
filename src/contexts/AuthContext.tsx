@@ -1,4 +1,11 @@
-import { ReactNode, createContext, useCallback, useEffect, useState } from "react";
+import {
+  ReactNode,
+  createContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { UserDTO } from "@/dtos/user-dto";
 import { api } from "@/server/api";
@@ -8,11 +15,15 @@ import {
     storageAuthTokenSave,
 } from "@/storage/auth-token";
 import {
+    storageLastUserIdGet,
+    storageLastUserIdRemove,
+    storageLastUserIdSave,
     storageUserGet,
     storageUserRemove,
     storageUserSave,
 } from "@/storage/user";
 import { clearDatabase } from "@/database/clear";
+import { logger } from "@/utils/logger";
 
 export type AuthContextDataProps = {
   user: UserDTO | null;
@@ -20,6 +31,7 @@ export type AuthContextDataProps = {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   isLoadingUserStorageData: boolean;
+  sessionExpired: boolean;
 };
 
 type AuthContextProviderProps = {
@@ -34,10 +46,13 @@ export function AuthContextProvider({ children }: AuthContextProviderProps) {
   const [user, setUser] = useState<UserDTO | null>(null);
   const [isLoadingUserStorageData, setIsLoadingUserStorageData] =
     useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const hasActiveSessionRef = useRef(false);
 
   async function userAndTokenUpdate(userData: UserDTO, token: string) {
     api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
+    hasActiveSessionRef.current = true;
     setUser(userData);
   }
 
@@ -50,29 +65,59 @@ export function AuthContextProvider({ children }: AuthContextProviderProps) {
     const { data } = await api.post("/travelers/auth", { email, password });
 
     if (data.user && data.token) {
+      const lastUserId = await storageLastUserIdGet();
+
+      if (lastUserId !== data.user.id) {
+        await clearDatabase();
+      }
+
       await persistUserSession(data.user, data.token);
+      await storageLastUserIdSave(data.user.id);
+      setSessionExpired(false);
       await userAndTokenUpdate(data.user, data.token);
     }
   }
+
+  const endSession = useCallback(() => {
+    hasActiveSessionRef.current = false;
+    setUser(null);
+    delete api.defaults.headers.common["Authorization"];
+  }, []);
 
   const signOut = useCallback(async () => {
     try {
       setIsLoadingUserStorageData(true);
 
-      setUser(null);
-      delete api.defaults.headers.common["Authorization"];
+      endSession();
+      setSessionExpired(false);
 
       await Promise.all([
         clearDatabase(),
         storageUserRemove(),
         storageAuthTokenRemove(),
+        storageLastUserIdRemove(),
       ]);
     } catch (error) {
-      console.warn("Failed to sign out cleanly:", error);
+      logger.warn("Failed to sign out cleanly:", error);
     } finally {
       setIsLoadingUserStorageData(false);
     }
-  }, []);
+  }, [endSession]);
+
+  const expireSession = useCallback(async () => {
+    if (!hasActiveSessionRef.current) {
+      return;
+    }
+
+    endSession();
+    setSessionExpired(true);
+
+    try {
+      await Promise.all([storageUserRemove(), storageAuthTokenRemove()]);
+    } catch (error) {
+      logger.warn("Failed to expire the session cleanly:", error);
+    }
+  }, [endSession]);
 
   async function updateUserProfile(userUpdate: UserDTO) {
     try {
@@ -90,10 +135,17 @@ export function AuthContextProvider({ children }: AuthContextProviderProps) {
       const userLogged = await storageUserGet();
       const { token } = await storageAuthTokenGet();
 
+      const lastUserId = await storageLastUserIdGet();
+
       if (token && userLogged) {
+        if (!lastUserId) {
+          await storageLastUserIdSave(userLogged.id);
+        }
+
         await userAndTokenUpdate(userLogged, token);
       } else {
         setUser(null);
+        setSessionExpired(Boolean(lastUserId));
 
         if (token || userLogged) {
           await Promise.all([storageUserRemove(), storageAuthTokenRemove()]);
@@ -111,12 +163,12 @@ export function AuthContextProvider({ children }: AuthContextProviderProps) {
   }, []);
 
   useEffect(() => {
-    const subscribe = api.registerInterceptTokenManager(signOut);
+    const subscribe = api.registerInterceptTokenManager(expireSession);
 
     return () => {
       subscribe();
     };
-  }, [signOut]);
+  }, [expireSession]);
 
   return (
     <AuthContext.Provider
@@ -126,6 +178,7 @@ export function AuthContextProvider({ children }: AuthContextProviderProps) {
         signIn,
         signOut,
         isLoadingUserStorageData,
+        sessionExpired,
       }}
     >
       {children}

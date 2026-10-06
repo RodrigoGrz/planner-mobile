@@ -7,7 +7,12 @@ describe("sync-error-classifier", () => {
       new AppError("Token inválido", { status: 401 }),
     );
 
-    expect(result).toMatchObject({ kind: "auth", status: 401 });
+    expect(result).toEqual({
+      kind: "auth",
+      status: 401,
+      message:
+        "Sua sessão expirou. Entre novamente para sincronizar suas alterações.",
+    });
   });
 
   it.each([400, 415, 422])(

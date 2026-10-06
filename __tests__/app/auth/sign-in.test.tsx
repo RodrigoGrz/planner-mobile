@@ -14,6 +14,12 @@ import { Alert } from "react-native";
 
 jest.mock("@/hooks/useAuth");
 
+let mockSyncCounts = { pendingCount: 0, failedCount: 0, syncingCount: 0 };
+
+jest.mock("@/contexts/SyncContext", () => ({
+  useSync: () => mockSyncCounts,
+}));
+
 jest.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
@@ -75,6 +81,7 @@ const mockedPush = router.push as jest.Mock;
 describe("SignIn", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSyncCounts = { pendingCount: 0, failedCount: 0, syncingCount: 0 };
   });
 
   it("should render screen correctly", () => {
@@ -88,6 +95,53 @@ describe("SignIn", () => {
     expect(screen.getByPlaceholderText("E-mail")).toBeTruthy();
     expect(screen.getByPlaceholderText("Senha")).toBeTruthy();
     expect(screen.getByText("Entrar")).toBeTruthy();
+  });
+
+  it("should show the session expired message when the session expired", () => {
+    mockSyncCounts = { pendingCount: 2, failedCount: 0, syncingCount: 0 };
+    mockedUseAuth.mockReturnValue({
+      signIn: jest.fn(),
+      sessionExpired: true,
+    });
+
+    render(<SignIn />, { wrapper: ToastProvider });
+
+    expect(
+      screen.getByText(
+        "Sua sessão expirou. Entre novamente para sincronizar suas alterações.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("should show a short session expired message when there are no unsynced changes", () => {
+    mockedUseAuth.mockReturnValue({
+      signIn: jest.fn(),
+      sessionExpired: true,
+    });
+
+    render(<SignIn />, { wrapper: ToastProvider });
+
+    expect(screen.getByText("Sua sessão expirou. Entre novamente.")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Sua sessão expirou. Entre novamente para sincronizar suas alterações.",
+      ),
+    ).toBeNull();
+  });
+
+  it("should not show the session expired message on a regular sign in", () => {
+    mockedUseAuth.mockReturnValue({
+      signIn: jest.fn(),
+      sessionExpired: false,
+    });
+
+    render(<SignIn />, { wrapper: ToastProvider });
+
+    expect(
+      screen.queryByText(
+        "Sua sessão expirou. Entre novamente para sincronizar suas alterações.",
+      ),
+    ).toBeNull();
   });
 
   it("should call signIn with email and password", async () => {

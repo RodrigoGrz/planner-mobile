@@ -9,9 +9,11 @@ import {
   updateLinkRemoteIdAfterSync,
 } from "@/repositories/link-repository";
 import {
+  countQueueItemsWaitingToSend,
   getQueueItemsOrdered,
   markQueueItemFailed,
   removeQueueItems,
+  resetQueueItemsFailedByAuth,
   resetStaleSyncingItems,
 } from "@/repositories/sync-queue-repository";
 import {
@@ -24,8 +26,12 @@ import {
 import { activitiesServer } from "@/server/activities-server";
 import { linksServer } from "@/server/links-server";
 import { tripServer } from "@/server/trip-server";
-import { processSyncQueue, subscribeSyncFailure } from "@/services/sync-engine";
-import { syncActivities } from "@/services/sync-service";
+import {
+  processSyncQueue,
+  runInitialSyncIfOnline,
+  subscribeSyncFailure,
+} from "@/services/sync-engine";
+import { syncActivities, syncTravelerTrips } from "@/services/sync-service";
 import {
   notifyTripDataUpdated,
   notifyTripRemoved,
@@ -52,7 +58,7 @@ jest.mock("@/repositories/link-repository", () => ({
 }));
 
 jest.mock("@/repositories/sync-queue-repository", () => ({
-  countActiveQueueItems: jest.fn(() => Promise.resolve(0)),
+  countQueueItemsWaitingToSend: jest.fn(() => Promise.resolve(0)),
   countFailedQueueItems: jest.fn(),
   countPendingQueueItems: jest.fn(),
   countSyncingQueueItems: jest.fn(),
@@ -61,6 +67,7 @@ jest.mock("@/repositories/sync-queue-repository", () => ({
   markQueueItemSyncing: jest.fn(),
   removeQueueItems: jest.fn(),
   resetFailedQueueItems: jest.fn(),
+  resetQueueItemsFailedByAuth: jest.fn(),
   resetStaleSyncingItems: jest.fn(),
 }));
 
@@ -267,27 +274,80 @@ describe("sync-engine", () => {
     expect(syncActivities).toHaveBeenCalledWith("trip-1");
   });
 
-  it("should treat a 401 AppError as an auth error and stop the queue", async () => {
+  it("should pull the trips after the push when only failed items remain", async () => {
+    queueOnce(activityItem);
+    (activitiesServer.create as jest.Mock).mockResolvedValue({
+      activityId: "activity-remote-1",
+    });
+    (countQueueItemsWaitingToSend as jest.Mock).mockResolvedValueOnce(0);
+
+    await processSyncQueue();
+
+    expect(syncTravelerTrips).toHaveBeenCalledTimes(1);
+  });
+
+  it("should not pull the trips while items are waiting to be sent", async () => {
+    queueOnce(activityItem);
+    (activitiesServer.create as jest.Mock).mockResolvedValue({
+      activityId: "activity-remote-1",
+    });
+    (countQueueItemsWaitingToSend as jest.Mock).mockResolvedValueOnce(1);
+
+    await processSyncQueue();
+
+    expect(syncTravelerTrips).not.toHaveBeenCalled();
+  });
+
+  it("should keep queue items pending after an auth error", async () => {
     (getQueueItemsOrdered as jest.Mock)
       .mockResolvedValueOnce([activityItem, linkItem])
       .mockResolvedValue([]);
     (activitiesServer.create as jest.Mock).mockRejectedValue(
-      new AppError("Token inválido", { status: 401 }),
+      new AppError("Não autorizado", { status: 401 }),
     );
 
     await processSyncQueue();
 
     expect(markQueueItemFailed).toHaveBeenCalledWith(
       "queue-1",
-      "AUTH_ERROR",
-      1,
-      null,
+      "Sua sessão expirou. Entre novamente para sincronizar suas alterações.",
+      0,
+      expect.any(String),
     );
-    expect(markActivitySyncFailed).toHaveBeenCalledWith(
+    expect(resetActivitySyncStatus).toHaveBeenCalledWith(
       "activity-local-1",
-      "AUTH_ERROR",
+      "pending",
     );
+    expect(markActivitySyncFailed).not.toHaveBeenCalled();
     expect(linksServer.create).not.toHaveBeenCalled();
+  });
+
+  it("should not notify a failure after an auth error", async () => {
+    queueOnce(activityItem);
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("Não autorizado", { status: 401 }),
+    );
+
+    await processSyncQueue();
+
+    expect(failureListener).not.toHaveBeenCalled();
+  });
+
+  it("should reset items failed by a legacy auth error before the initial sync", async () => {
+    (getQueueItemsOrdered as jest.Mock).mockResolvedValue([]);
+
+    await runInitialSyncIfOnline(true);
+
+    expect(resetQueueItemsFailedByAuth).toHaveBeenCalledTimes(1);
+    expect(
+      (resetQueueItemsFailedByAuth as jest.Mock).mock.invocationCallOrder[0],
+    ).toBeLessThan((getQueueItemsOrdered as jest.Mock).mock.invocationCallOrder[0]);
+  });
+
+  it("should not reset legacy auth failures when offline", async () => {
+    await runInitialSyncIfOnline(false);
+
+    expect(resetQueueItemsFailedByAuth).not.toHaveBeenCalled();
   });
 
   it("should retry a 409 response with backoff", async () => {
@@ -673,6 +733,26 @@ describe("sync-engine", () => {
 
       await jest.advanceTimersByTimeAsync(1000);
       expect(getQueueItemsOrdered).toHaveBeenCalledTimes(3);
+    });
+
+    it("should cancel the scheduled rate limit run after an auth error", async () => {
+      (getQueueItemsOrdered as jest.Mock)
+        .mockResolvedValueOnce([activityItem])
+        .mockResolvedValueOnce([linkItem])
+        .mockResolvedValue([]);
+      (activitiesServer.create as jest.Mock).mockRejectedValue(
+        new AppError("Too many requests", { status: 429, retryAfterMs: 30000 }),
+      );
+      (linksServer.create as jest.Mock).mockRejectedValue(
+        new AppError("Não autorizado", { status: 401 }),
+      );
+
+      await processSyncQueue();
+      await processSyncQueue();
+      expect(getQueueItemsOrdered).toHaveBeenCalledTimes(2);
+
+      await jest.advanceTimersByTimeAsync(30000);
+      expect(getQueueItemsOrdered).toHaveBeenCalledTimes(2);
     });
 
     it("should not notify a failure for a 429", async () => {

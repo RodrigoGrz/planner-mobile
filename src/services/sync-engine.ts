@@ -15,8 +15,8 @@ import {
   updateLinkRemoteIdAfterSync,
 } from "@/repositories/link-repository";
 import {
-  countActiveQueueItems,
   countFailedQueueItems,
+  countQueueItemsWaitingToSend,
   countPendingQueueItems,
   countSyncingQueueItems,
   getQueueItemsOrdered,
@@ -24,6 +24,7 @@ import {
   markQueueItemSyncing,
   removeQueueItems,
   resetFailedQueueItems,
+  resetQueueItemsFailedByAuth,
   resetStaleSyncingItems,
 } from "@/repositories/sync-queue-repository";
 import {
@@ -124,10 +125,15 @@ function notifySyncFailures(messages: string[]) {
   syncFailureListeners.forEach((listener) => listener({ message }));
 }
 
-function scheduleQueueRun(delayMs: number) {
+function cancelScheduledQueueRun() {
   if (queueRunTimer) {
     clearTimeout(queueRunTimer);
+    queueRunTimer = null;
   }
+}
+
+function scheduleQueueRun(delayMs: number) {
+  cancelScheduledQueueRun();
 
   queueRunTimer = setTimeout(() => {
     queueRunTimer = null;
@@ -472,16 +478,19 @@ async function handleItemFailure(
   logger.warn(`Sync ${item.entityType} ${item.operation} failed:`, error);
 
   if (classification.kind === "auth") {
+    const retryAt = getRetryAtAfter(0);
+
     for (const queueId of item.sourceQueueIds) {
       await markQueueItemFailed(
         queueId,
         classification.message,
-        getPreviousRetryCount(queueItems, queueId) + 1,
-        null,
+        getPreviousRetryCount(queueItems, queueId),
+        retryAt,
       );
     }
 
-    await markEntityFailed(item, classification.message);
+    await resetEntityStatusToPending(item);
+    cancelScheduledQueueRun();
     return "stop";
   }
 
@@ -602,7 +611,7 @@ export async function processSyncQueue() {
       queueItems = await getQueueItemsOrdered();
     }
 
-    if ((await countActiveQueueItems()) === 0) {
+    if ((await countQueueItemsWaitingToSend()) === 0) {
       try {
         await pullSyncAfterPush();
       } catch (error) {
@@ -638,6 +647,7 @@ export async function retryFailedSync() {
 
 export async function runInitialSyncIfOnline(isOnline: boolean) {
   if (isOnline) {
+    await resetQueueItemsFailedByAuth();
     await processSyncQueue();
   }
 }

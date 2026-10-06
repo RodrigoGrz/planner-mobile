@@ -16,7 +16,6 @@ export type SyncErrorClassification = {
   retryAfterMs?: number;
 };
 
-const AUTH_ERROR_MESSAGE = "AUTH_ERROR";
 const RETRYABLE_CLIENT_STATUSES = [408, 409];
 
 function apiMessage(error: unknown) {
@@ -35,7 +34,7 @@ export function classifySyncError(error: unknown): SyncErrorClassification {
   }
 
   if (status === 401) {
-    return { kind: "auth", status, message: AUTH_ERROR_MESSAGE };
+    return { kind: "auth", status, message: ERROR_MESSAGES.sessionExpired };
   }
 
   if (status === 429) {

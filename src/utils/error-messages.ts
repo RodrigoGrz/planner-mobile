@@ -10,6 +10,9 @@ export const ERROR_MESSAGES = {
   rateLimited: "Muitas requisições, tentando novamente em instantes.",
   fileTooLarge: "A imagem é grande demais.",
   syncFailed: "Não foi possível sincronizar uma alteração.",
+  sessionExpired:
+    "Sua sessão expirou. Entre novamente para sincronizar suas alterações.",
+  sessionExpiredWithoutChanges: "Sua sessão expirou. Entre novamente.",
   syncFailures: (count: number) =>
     `${count} alterações não puderam ser sincronizadas.`,
 } as const;
