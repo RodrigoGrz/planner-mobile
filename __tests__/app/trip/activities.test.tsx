@@ -102,16 +102,18 @@ const tripDetails = {
 function submitNewActivity({
   filled,
   hour = "14",
+  title = "Museu",
 }: {
   filled: boolean;
   hour?: string;
+  title?: string;
 }) {
   render(<Activities tripDetails={tripDetails} />, { wrapper: ToastProvider });
 
   fireEvent.press(screen.getByText("Nova atividade"));
 
   if (filled) {
-    fireEvent.changeText(screen.getByPlaceholderText("Qual atividade?"), "Museu");
+    fireEvent.changeText(screen.getByPlaceholderText("Qual atividade?"), title);
     fireEvent(screen.getByPlaceholderText("Data"), "pressIn");
     fireEvent.press(screen.getByText("pick-day"));
     fireEvent.press(screen.getByText("Confirmar"));
@@ -176,6 +178,37 @@ describe("Activities", () => {
       date: "2026-10-02",
       hour: 22,
     });
+  });
+
+  it("should reject an activity title longer than 100 characters", async () => {
+    submitNewActivity({ filled: true, title: "a".repeat(101) });
+
+    expect(
+      await screen.findByText("O título deve ter no máximo 100 caracteres."),
+    ).toBeTruthy();
+    expect(mutationService.createActivity).not.toHaveBeenCalled();
+  });
+
+  it("should send the trimmed activity title", async () => {
+    (mutationService.createActivity as jest.Mock).mockResolvedValue({});
+
+    submitNewActivity({ filled: true, title: "  Museu  " });
+
+    expect(
+      await screen.findByText("Nova atividade cadastrada com sucesso!"),
+    ).toBeTruthy();
+    expect(mutationService.createActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Museu" }),
+    );
+  });
+
+  it("should limit the activity title input to 100 characters", () => {
+    render(<Activities tripDetails={tripDetails} />, { wrapper: ToastProvider });
+    fireEvent.press(screen.getByText("Nova atividade"));
+
+    expect(screen.getByPlaceholderText("Qual atividade?").props.maxLength).toBe(
+      100,
+    );
   });
 
   it("should show an error for an hour outside 0 to 23", async () => {

@@ -13,6 +13,7 @@ import { colors } from "@/styles/colors";
 import { ERROR_MESSAGES } from "@/utils/error-messages";
 import { logger } from "@/utils/logger";
 import { isValidActivityHour, toTripDayString } from "@/utils/trip-dates";
+import { MAX_TITLE_LENGTH, validateInput } from "@/utils/validateInput";
 import dayjs from "dayjs";
 import {
   Clock,
@@ -56,8 +57,13 @@ export function Activities({ tripDetails }: Props) {
 
   async function handleCreateTripACtivity() {
     try {
-      if (!activityTitle || !activityDate || !activityHour) {
-        showErrorMessage("Preencha todos os campos.");
+      if (!activityTitle.trim() || !activityDate || !activityHour) {
+        showErrorMessage(ERROR_MESSAGES.requiredActivityFields);
+        return;
+      }
+
+      if (!validateInput.itemTitle(activityTitle)) {
+        showErrorMessage(ERROR_MESSAGES.titleTooLong);
         return;
       }
 
@@ -72,7 +78,7 @@ export function Activities({ tripDetails }: Props) {
 
       await mutationService.createActivity({
         tripId: tripDetails.id,
-        title: activityTitle,
+        title: activityTitle.trim(),
         date: activityDate,
         hour,
       });
@@ -163,6 +169,7 @@ export function Activities({ tripDetails }: Props) {
               placeholder="Qual atividade?"
               onChangeText={setActivityTitle}
               value={activityTitle}
+              maxLength={MAX_TITLE_LENGTH}
             />
           </Input>
 

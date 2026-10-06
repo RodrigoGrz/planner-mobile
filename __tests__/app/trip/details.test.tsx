@@ -116,8 +116,49 @@ describe("Details", () => {
   it("should show a validation error when the url is invalid", async () => {
     openNewLinkForm({ title: "Reserva", url: "not a url" });
 
-    expect(await screen.findByText("Link inválido.")).toBeTruthy();
+    expect(
+      await screen.findByText("Link inválido. Use um endereço http ou https."),
+    ).toBeTruthy();
     expect(mutationService.createLink).not.toHaveBeenCalled();
+  });
+
+  it("should reject a javascript link", async () => {
+    openNewLinkForm({ title: "Reserva", url: "javascript:alert(1)" });
+
+    expect(
+      await screen.findByText("Link inválido. Use um endereço http ou https."),
+    ).toBeTruthy();
+    expect(mutationService.createLink).not.toHaveBeenCalled();
+  });
+
+  it("should reject a link title longer than 100 characters", async () => {
+    openNewLinkForm({ title: "a".repeat(101), url: "https://example.com" });
+
+    expect(
+      await screen.findByText("O título deve ter no máximo 100 caracteres."),
+    ).toBeTruthy();
+    expect(mutationService.createLink).not.toHaveBeenCalled();
+  });
+
+  it("should send the trimmed link title and url", async () => {
+    (mutationService.createLink as jest.Mock).mockResolvedValue({});
+
+    openNewLinkForm({ title: "  Reserva  ", url: " https://example.com/reserva " });
+
+    expect(await screen.findByText("Link criado com sucesso!")).toBeTruthy();
+    expect(mutationService.createLink).toHaveBeenCalledWith({
+      tripId: "trip-1",
+      title: "Reserva",
+      url: "https://example.com/reserva",
+    });
+  });
+
+  it("should limit the link inputs to the api sizes", () => {
+    render(<Details tripId="trip-1" />, { wrapper: ToastProvider });
+    fireEvent.press(screen.getByText("Cadastrar novo link"));
+
+    expect(screen.getByPlaceholderText("Título do link").props.maxLength).toBe(100);
+    expect(screen.getByPlaceholderText("URL").props.maxLength).toBe(2048);
   });
 
   it("should show a success toast and close the form when online", async () => {

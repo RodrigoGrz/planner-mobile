@@ -17,7 +17,14 @@ import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
 import { logger } from "@/utils/logger";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
-import { getLocalTodayString, tripDayjs } from "@/utils/trip-dates";
+import { ERROR_MESSAGES } from "@/utils/error-messages";
+import {
+  getLocalTodayString,
+  getTripPeriodUpdateError,
+  toTripDayString,
+  tripDayjs,
+} from "@/utils/trip-dates";
+import { MAX_DESTINATION_LENGTH, validateInput } from "@/utils/validateInput";
 import {
   CalendarRange,
   Calendar as IconCalendar,
@@ -114,6 +121,9 @@ export default function Trip() {
   const [selectedDates, setSelectedDates] = useState({} as DatesSelected);
 
   const trip = tripFromDb ? buildTripData(tripFromDb) : null;
+  const today = getLocalTodayString();
+  const currentStartDay = tripFromDb ? toTripDayString(tripFromDb.startsAt) : today;
+  const editCalendarMinDate = currentStartDay < today ? currentStartDay : today;
 
   useEffect(() => {
     if (!tripParams.id) {
@@ -164,11 +174,26 @@ export default function Trip() {
         );
       }
 
+      if (!validateInput.destination(destination)) {
+        return showErrorMessage(ERROR_MESSAGES.invalidDestination);
+      }
+
+      const periodError = getTripPeriodUpdateError({
+        startsAt: selectedDates.startsAt.dateString,
+        endsAt: selectedDates.endsAt.dateString,
+        currentStartsAt: toTripDayString(trip.startsAt),
+        currentEndsAt: toTripDayString(trip.endsAt),
+      });
+
+      if (periodError) {
+        return showErrorMessage(periodError);
+      }
+
       setIsUpdatingTrip(true);
 
       await mutationService.updateTrip({
         tripId: trip.id,
-        destination,
+        destination: destination.trim(),
         startsAt: selectedDates.startsAt.dateString,
         endsAt: selectedDates.endsAt.dateString,
       });
@@ -296,6 +321,7 @@ export default function Trip() {
               placeholder="Para onde?"
               onChangeText={setDestination}
               value={destination}
+              maxLength={MAX_DESTINATION_LENGTH}
             />
           </Input>
 
@@ -329,7 +355,7 @@ export default function Trip() {
       >
         <View className="gap-4 mt-4">
           <Calendar
-            minDate={getLocalTodayString()}
+            minDate={editCalendarMinDate}
             onDayPress={handleSelectDate}
             markedDates={selectedDates.dates}
           />

@@ -3,7 +3,14 @@ import { Input } from "@/components/input";
 import { useToast } from "@/contexts/ToastContext";
 import { registerServer } from "@/server/register-server";
 import { colors } from "@/styles/colors";
+import { ERROR_MESSAGES } from "@/utils/error-messages";
 import { maskPhone } from "@/utils/make-phone";
+import {
+  MAX_EMAIL_LENGTH,
+  MAX_NAME_LENGTH,
+  MAX_PHONE_LENGTH,
+  validateInput,
+} from "@/utils/validateInput";
 import { router } from "expo-router";
 import {
   Eye,
@@ -19,7 +26,7 @@ import { Image, Text, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 export default function SignUp() {
-  const { showError, showSuccess } = useToast();
+  const { showError, showErrorMessage, showSuccess } = useToast();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,14 +34,41 @@ export default function SignUp() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  function getFormError() {
+    if (!validateInput.personName(name)) {
+      return ERROR_MESSAGES.invalidName;
+    }
+
+    if (!validateInput.email(email)) {
+      return ERROR_MESSAGES.invalidEmail;
+    }
+
+    if (!validateInput.password(password)) {
+      return ERROR_MESSAGES.invalidPassword;
+    }
+
+    if (!validateInput.phone(phone)) {
+      return ERROR_MESSAGES.invalidPhone;
+    }
+
+    return null;
+  }
+
   async function handleRegister() {
+    const formError = getFormError();
+
+    if (formError) {
+      showErrorMessage(formError);
+      return;
+    }
+
     try {
       setLoading(true);
       await registerServer.registerTraveler({
-        email,
-        name,
+        email: validateInput.normalizeEmail(email),
+        name: name.trim(),
         password,
-        phone,
+        phone: phone.trim(),
       });
       showSuccess("Conta criada com sucesso!");
       router.back();
@@ -76,6 +110,7 @@ export default function SignUp() {
               placeholder="Nome"
               onChangeText={setName}
               value={name}
+              maxLength={MAX_NAME_LENGTH}
             />
           </Input>
 
@@ -85,6 +120,7 @@ export default function SignUp() {
               placeholder="E-mail"
               onChangeText={setEmail}
               value={email}
+              maxLength={MAX_EMAIL_LENGTH}
             />
           </Input>
 
@@ -118,6 +154,7 @@ export default function SignUp() {
               keyboardType="phone-pad"
               value={phone}
               onChangeText={(text) => setPhone(maskPhone(text))}
+              maxLength={MAX_PHONE_LENGTH}
             />
           </Input>
 
