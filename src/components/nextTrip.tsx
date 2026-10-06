@@ -30,6 +30,9 @@ export function NextTrip({ trip }: NextTripProps) {
             {tripDayjs(trip.startsAt).date()} a {tripDayjs(trip.endsAt).date()} de{" "}
             {tripDayjs(trip.endsAt).format("MMMM")}.
           </Text>
+          {trip.isConfirmed === false ? (
+            <Text className="text-amber-200 text-xs mt-1">Convite pendente</Text>
+          ) : null}
         </View>
       </View>
     </View>

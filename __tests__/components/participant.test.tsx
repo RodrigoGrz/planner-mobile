@@ -42,6 +42,36 @@ describe("Participant", () => {
     expect(getByText("Pendente")).toBeTruthy();
   });
 
+  it("should show Pendente when the name is null", () => {
+    const { getByText } = render(
+      <Participant
+        data={{
+          id: "1",
+          name: null,
+          email: "teste@email.com",
+          isConfirmed: false,
+        }}
+      />,
+    );
+
+    expect(getByText("Pendente")).toBeTruthy();
+  });
+
+  it("should show Pendente when the name is empty", () => {
+    const { getByText } = render(
+      <Participant
+        data={{
+          id: "1",
+          name: "",
+          email: "teste@email.com",
+          isConfirmed: false,
+        }}
+      />,
+    );
+
+    expect(getByText("Pendente")).toBeTruthy();
+  });
+
   it("should render email", () => {
     const { getByText } = render(
       <Participant

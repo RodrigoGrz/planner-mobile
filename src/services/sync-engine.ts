@@ -30,6 +30,7 @@ import {
 import {
   getStoredRemoteId,
   isTripAvailableForChildSync,
+  isTripInvitePending,
   markTripImageSyncFailed,
   markTripSyncFailed,
   markTripSyncing,
@@ -411,12 +412,28 @@ async function pullSyncAfterPush() {
 const tripPullInFlight = new Map<string, Promise<void>>();
 const tripPullScheduled = new Set<string>();
 
+async function isInvitePendingAfterRefresh(tripId: string) {
+  if (!(await isTripInvitePending(tripId))) {
+    return false;
+  }
+
+  try {
+    await syncTravelerTrips();
+  } catch (error) {
+    logger.warn("Traveler trips refresh before pull failed:", error);
+  }
+
+  return isTripInvitePending(tripId);
+}
+
 async function executePullSyncTripData(tripId: string) {
-  const results = await Promise.allSettled([
-    syncTripDetail(tripId),
-    syncActivities(tripId),
-    syncTripDetails(tripId),
-  ]);
+  const isInvitePending = await isInvitePendingAfterRefresh(tripId);
+
+  const results = await Promise.allSettled(
+    isInvitePending
+      ? [syncTripDetail(tripId)]
+      : [syncTripDetail(tripId), syncActivities(tripId), syncTripDetails(tripId)],
+  );
 
   const labels = ["trip detail", "activities", "links/participants"] as const;
 

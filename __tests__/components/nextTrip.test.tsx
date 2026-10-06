@@ -34,6 +34,22 @@ describe("NextTrip", () => {
     expect(getByText("1 a 5 de outubro.")).toBeTruthy();
   });
 
+  it("should show the pending invite label for an unconfirmed trip", () => {
+    const { getByText } = render(
+      <NextTrip trip={{ ...tripMock, isConfirmed: false } as any} />,
+    );
+
+    expect(getByText("Convite pendente")).toBeTruthy();
+  });
+
+  it("should not show the pending invite label for a confirmed trip", () => {
+    const { queryByText } = render(
+      <NextTrip trip={{ ...tripMock, isConfirmed: true } as any} />,
+    );
+
+    expect(queryByText("Convite pendente")).toBeNull();
+  });
+
   it("should render image when coverImageUrl exists", () => {
     const { UNSAFE_getByType } = render(<NextTrip trip={tripMock as any} />);
 

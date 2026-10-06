@@ -35,7 +35,11 @@ export function TripItem({ trip }: TripItemProps) {
             {trip.destination}
           </Text>
 
-          <Badge startsAt={trip.startsAt} endsAt={trip.endsAt} />
+          {trip.isConfirmed === false ? (
+            <Text className="text-zinc-400 text-xs">Convite pendente</Text>
+          ) : (
+            <Badge startsAt={trip.startsAt} endsAt={trip.endsAt} />
+          )}
         </View>
 
         <Text className="text-zinc-400">

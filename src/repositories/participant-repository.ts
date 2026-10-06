@@ -14,7 +14,7 @@ type ParticipantRow = {
 function mapParticipantRow(row: ParticipantRow): Participant {
   return {
     id: row.id,
-    name: row.name ?? "",
+    name: row.name,
     email: row.email,
     isConfirmed: row.is_confirmed === 1,
   };

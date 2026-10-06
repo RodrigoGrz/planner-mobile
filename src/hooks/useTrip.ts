@@ -1,7 +1,10 @@
 import { useNetwork } from "@/contexts/NetworkContext";
 import { useLoadGeneration } from "@/hooks/useLoadGeneration";
 import { hasSynced } from "@/database/has-synced";
-import { getTripById } from "@/repositories/trip-repository";
+import {
+  getTripById,
+  isTripInvitePending,
+} from "@/repositories/trip-repository";
 import {
   subscribeTripDataUpdated,
   subscribeTripRemoved,
@@ -16,6 +19,7 @@ export function useTrip(tripId: string | undefined) {
   const [trip, setTrip] = useState<TripByID | null>(null);
   const [status, setStatus] = useState<DataStatus>("loading");
   const [isRemoved, setIsRemoved] = useState(false);
+  const [isInvitePending, setIsInvitePending] = useState(false);
   const hasCacheRef = useRef(false);
 
   const loadLocal = useCallback(async () => {
@@ -24,9 +28,10 @@ export function useTrip(tripId: string | undefined) {
     }
 
     const generation = beginLoad();
-    const [localTrip, synced] = await Promise.all([
+    const [localTrip, synced, invitePending] = await Promise.all([
       getTripById(tripId),
       hasSynced(`trip:${tripId}`),
+      isTripInvitePending(tripId),
     ]);
     const hasCache = synced || localTrip !== null;
 
@@ -35,6 +40,7 @@ export function useTrip(tripId: string | undefined) {
     }
 
     setTrip(localTrip);
+    setIsInvitePending(invitePending);
     hasCacheRef.current = hasCache;
 
     return { hasCache, stale: false };
@@ -88,5 +94,5 @@ export function useTrip(tripId: string | undefined) {
     });
   }, [tripId, beginLoad]);
 
-  return { trip, status, refresh, isRemoved };
+  return { trip, status, refresh, isRemoved, isInvitePending };
 }

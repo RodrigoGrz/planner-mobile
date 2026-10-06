@@ -1,6 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { hasSynced } from "@/database/has-synced";
-import { getTripById } from "@/repositories/trip-repository";
+import {
+  getTripById,
+  isTripInvitePending,
+} from "@/repositories/trip-repository";
 
 let mockIsOnline = true;
 const tripDataUpdatedListeners: Array<() => void> = [];
@@ -21,6 +24,7 @@ jest.mock("@/database/has-synced", () => ({
 
 jest.mock("@/repositories/trip-repository", () => ({
   getTripById: jest.fn(),
+  isTripInvitePending: jest.fn(() => Promise.resolve(false)),
 }));
 
 jest.mock("@/services/trip-sync-events", () => ({
@@ -121,6 +125,41 @@ describe("useTrip", () => {
 
     await waitFor(() => {
       expect(result.current.status).toBe("offline");
+    });
+  });
+
+  it("should expose a pending invite", async () => {
+    (hasSynced as jest.Mock).mockResolvedValue(true);
+    (getTripById as jest.Mock).mockResolvedValue(null);
+    (isTripInvitePending as jest.Mock).mockResolvedValueOnce(true);
+
+    const { result } = renderHook(() => useTrip("t1"));
+
+    await waitFor(() => {
+      expect(result.current.isInvitePending).toBe(true);
+    });
+    expect(isTripInvitePending).toHaveBeenCalledWith("t1");
+  });
+
+  it("should update the pending invite after the trip data updates", async () => {
+    (hasSynced as jest.Mock).mockResolvedValue(true);
+    (getTripById as jest.Mock).mockResolvedValue(null);
+    (isTripInvitePending as jest.Mock)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    const { result } = renderHook(() => useTrip("t1"));
+
+    await waitFor(() => {
+      expect(result.current.isInvitePending).toBe(true);
+    });
+
+    act(() => {
+      tripDataUpdatedListeners.forEach((listener) => listener());
+    });
+
+    await waitFor(() => {
+      expect(result.current.isInvitePending).toBe(false);
     });
   });
 
