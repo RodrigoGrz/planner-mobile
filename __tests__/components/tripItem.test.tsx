@@ -54,6 +54,24 @@ describe("TripItem", () => {
     expect(getByText("1 a 5 de outubro.")).toBeTruthy();
   });
 
+  it("should show the pending invite label for an unconfirmed trip", () => {
+    const { getByText, queryByText } = render(
+      <TripItem trip={{ ...tripMock, isConfirmed: false } as any} />,
+    );
+
+    expect(getByText("Convite pendente")).toBeTruthy();
+    expect(queryByText("Badge")).toBeNull();
+  });
+
+  it("should not show the pending invite label for a confirmed trip", () => {
+    const { getByText, queryByText } = render(
+      <TripItem trip={{ ...tripMock, isConfirmed: true } as any} />,
+    );
+
+    expect(getByText("Badge")).toBeTruthy();
+    expect(queryByText("Convite pendente")).toBeNull();
+  });
+
   it("should navigate when pressed", () => {
     const { getByRole } = render(<TripItem trip={tripMock as any} />);
 

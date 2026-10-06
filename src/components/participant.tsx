@@ -5,7 +5,7 @@ import { colors } from "@/styles/colors"
 
 export type ParticipantProps = {
   id: string
-  name?: string
+  name?: string | null
   email: string
   isConfirmed: boolean
 }
@@ -19,7 +19,7 @@ export function Participant({ data }: Props) {
     <View className="w-full flex-row items-center">
       <View className="flex-1">
         <Text className="text-zinc-100 text-base font-semibold">
-          {data.name ?? "Pendente"}
+          {data.name || "Pendente"}
         </Text>
 
         <Text className="text-zinc-400 text-sm">{data.email}</Text>

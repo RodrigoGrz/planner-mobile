@@ -39,6 +39,9 @@ export type TripData = {
   when: string;
 };
 
+const PENDING_INVITE_MESSAGE =
+  "Confirme sua presença pelo link enviado ao seu e-mail para ver atividades, links e participantes.";
+
 enum MODAL {
   NONE = 0,
   UPDATE_TRIP = 1,
@@ -68,6 +71,27 @@ function buildTripData(trip: NonNullable<ReturnType<typeof useTrip>["trip"]>): T
   };
 }
 
+function TripHeader({ when, onEdit }: { when: string; onEdit?: () => void }) {
+  return (
+    <Input variant="tertiary">
+      <MapPin color={colors.zinc[400]} size={20} />
+      <Input.Field value={when} readOnly />
+
+      {onEdit ? (
+        <TouchableOpacity
+          activeOpacity={0.6}
+          accessibilityRole="button"
+          accessibilityLabel="Editar viagem"
+          className="w-9 h-9 bg-zinc-800 items-center justify-center rounded"
+          onPress={onEdit}
+        >
+          <Settings2 color={colors.zinc[400]} size={20} />
+        </TouchableOpacity>
+      ) : null}
+    </Input>
+  );
+}
+
 export default function Trip() {
   const { isOnline } = useNetwork();
   const tripParams = useLocalSearchParams<{ id: string }>();
@@ -77,6 +101,7 @@ export default function Trip() {
     status,
     refresh,
     isRemoved,
+    isInvitePending,
   } = useTrip(tripParams.id);
   const { showError, showErrorMessage, showSuccess, showInfo } = useToast();
 
@@ -199,22 +224,24 @@ export default function Trip() {
     return <Loading />;
   }
 
+  if (isInvitePending) {
+    return (
+      <View className="flex-1 px-5 pt-16">
+        <TripHeader when={trip.when} />
+
+        <Text className="text-zinc-400 text-center mt-8 leading-6">
+          {PENDING_INVITE_MESSAGE}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 px-5 pt-16">
-      <Input variant="tertiary">
-        <MapPin color={colors.zinc[400]} size={20} />
-        <Input.Field value={trip.when} readOnly />
-
-        <TouchableOpacity
-          activeOpacity={0.6}
-          accessibilityRole="button"
-          accessibilityLabel="Editar viagem"
-          className="w-9 h-9 bg-zinc-800 items-center justify-center rounded"
-          onPress={() => setShowModal(MODAL.UPDATE_TRIP)}
-        >
-          <Settings2 color={colors.zinc[400]} size={20} />
-        </TouchableOpacity>
-      </Input>
+      <TripHeader
+        when={trip.when}
+        onEdit={() => setShowModal(MODAL.UPDATE_TRIP)}
+      />
 
       <SyncingLabel visible={status === "syncing"} />
 

@@ -18,6 +18,7 @@ import {
 } from "@/repositories/sync-queue-repository";
 import {
   getStoredRemoteId,
+  isTripInvitePending,
   markTripSyncFailed,
   overwriteTripFromServer,
   removeTripLocally,
@@ -28,10 +29,16 @@ import { linksServer } from "@/server/links-server";
 import { tripServer } from "@/server/trip-server";
 import {
   processSyncQueue,
+  pullSyncTripData,
   runInitialSyncIfOnline,
   subscribeSyncFailure,
 } from "@/services/sync-engine";
-import { syncActivities, syncTravelerTrips } from "@/services/sync-service";
+import {
+  syncActivities,
+  syncTravelerTrips,
+  syncTripDetail,
+  syncTripDetails,
+} from "@/services/sync-service";
 import {
   notifyTripDataUpdated,
   notifyTripRemoved,
@@ -74,6 +81,7 @@ jest.mock("@/repositories/sync-queue-repository", () => ({
 jest.mock("@/repositories/trip-repository", () => ({
   getStoredRemoteId: jest.fn(),
   isTripAvailableForChildSync: jest.fn(() => Promise.resolve(true)),
+  isTripInvitePending: jest.fn(() => Promise.resolve(false)),
   markTripImageSyncFailed: jest.fn(),
   markTripSyncFailed: jest.fn(),
   markTripSyncing: jest.fn(),
@@ -272,6 +280,69 @@ describe("sync-engine", () => {
     await flushPromises();
 
     expect(syncActivities).toHaveBeenCalledWith("trip-1");
+  });
+
+  describe("pullSyncTripData for pending invites", () => {
+    it("should only pull the trip detail of a pending invite", async () => {
+      (isTripInvitePending as jest.Mock)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true);
+
+      await pullSyncTripData("trip-1");
+
+      expect(syncTripDetail).toHaveBeenCalledWith("trip-1");
+      expect(syncActivities).not.toHaveBeenCalled();
+      expect(syncTripDetails).not.toHaveBeenCalled();
+    });
+
+    it("should refresh the traveler trips before pulling a pending invite", async () => {
+      (isTripInvitePending as jest.Mock)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true);
+
+      await pullSyncTripData("trip-1");
+
+      expect(syncTravelerTrips).toHaveBeenCalledTimes(1);
+      expect(
+        (syncTravelerTrips as jest.Mock).mock.invocationCallOrder[0],
+      ).toBeLessThan((syncTripDetail as jest.Mock).mock.invocationCallOrder[0]);
+    });
+
+    it("should still pull the trip detail of a pending invite when refreshing the traveler trips fails", async () => {
+      (isTripInvitePending as jest.Mock)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true);
+      (syncTravelerTrips as jest.Mock).mockRejectedValueOnce(
+        new AppError("Sem conexão com o servidor.", { code: "NETWORK" }),
+      );
+
+      await expect(pullSyncTripData("trip-1")).resolves.toBeUndefined();
+
+      expect(syncTripDetail).toHaveBeenCalledWith("trip-1");
+      expect(syncActivities).not.toHaveBeenCalled();
+      expect(syncTripDetails).not.toHaveBeenCalled();
+    });
+
+    it("should pull everything once the invite is confirmed", async () => {
+      (isTripInvitePending as jest.Mock)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+
+      await pullSyncTripData("trip-1");
+
+      expect(syncTripDetail).toHaveBeenCalledWith("trip-1");
+      expect(syncActivities).toHaveBeenCalledWith("trip-1");
+      expect(syncTripDetails).toHaveBeenCalledWith("trip-1");
+    });
+
+    it("should pull everything for a trip that is not a pending invite", async () => {
+      await pullSyncTripData("trip-1");
+
+      expect(syncTravelerTrips).not.toHaveBeenCalled();
+      expect(syncTripDetail).toHaveBeenCalledWith("trip-1");
+      expect(syncActivities).toHaveBeenCalledWith("trip-1");
+      expect(syncTripDetails).toHaveBeenCalledWith("trip-1");
+    });
   });
 
   it("should pull the trips after the push when only failed items remain", async () => {

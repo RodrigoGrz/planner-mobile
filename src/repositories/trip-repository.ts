@@ -122,6 +122,21 @@ export async function resolveAllTripIds(tripId: string) {
   return [...new Set([tripId, localTripId, remoteTripId])];
 }
 
+export async function isTripInvitePending(tripId: string) {
+  const tripIds = await resolveAllTripIds(tripId);
+  const placeholders = tripIds.map(() => "?").join(", ");
+  const db = await getDatabase();
+
+  const row = await db.getFirstAsync<{ is_confirmed: number }>(
+    `SELECT is_confirmed FROM traveler_trips
+     WHERE trip_id IN (${placeholders}) OR remote_id IN (${placeholders})
+     LIMIT 1`,
+    [...tripIds, ...tripIds],
+  );
+
+  return row?.is_confirmed === 0;
+}
+
 export async function getTravelerTrips() {
   const db = await getDatabase();
 

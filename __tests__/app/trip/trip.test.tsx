@@ -31,6 +31,7 @@ const mockTrip = {
 };
 
 let mockIsRemoved = false;
+let mockIsInvitePending = false;
 
 jest.mock("@/hooks/useTrip", () => ({
   useTrip: () => ({
@@ -38,6 +39,7 @@ jest.mock("@/hooks/useTrip", () => ({
     status: "ready",
     refresh: mockRefresh,
     isRemoved: mockIsRemoved,
+    isInvitePending: mockIsInvitePending,
   }),
 }));
 
@@ -49,13 +51,17 @@ jest.mock("@/services/mutation-service", () => ({
   mutationService: { updateTrip: jest.fn() },
 }));
 
-jest.mock("@/app/(app)/trip/activities", () => ({
-  Activities: () => null,
-}));
+jest.mock("@/app/(app)/trip/activities", () => {
+  const { Text } = require("react-native");
 
-jest.mock("@/app/(app)/trip/details", () => ({
-  Details: () => null,
-}));
+  return { Activities: () => <Text>activities-tab</Text> };
+});
+
+jest.mock("@/app/(app)/trip/details", () => {
+  const { Text } = require("react-native");
+
+  return { Details: () => <Text>details-tab</Text> };
+});
 
 jest.mock("@/utils/logger", () => ({
   logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -134,6 +140,7 @@ describe("Trip", () => {
     jest.clearAllMocks();
     mockIsOnline = true;
     mockIsRemoved = false;
+    mockIsInvitePending = false;
     mockSearchParams = { id: "trip-1" };
     jest.spyOn(Alert, "alert");
   });
@@ -236,6 +243,45 @@ describe("Trip", () => {
       expect.any(String),
       expect.any(Array),
     );
+  });
+
+  it("should show the pending invite notice instead of activities and details", () => {
+    mockIsInvitePending = true;
+
+    render(<Trip />, { wrapper: ToastProvider });
+
+    expect(
+      screen.getByText(
+        "Confirme sua presença pelo link enviado ao seu e-mail para ver atividades, links e participantes.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByDisplayValue("Paris de 01 a 05 de out.")).toBeTruthy();
+    expect(screen.queryByText("activities-tab")).toBeNull();
+    expect(screen.queryByText("details-tab")).toBeNull();
+    expect(screen.queryByText("Atividades")).toBeNull();
+    expect(screen.queryByText("Detalhes")).toBeNull();
+  });
+
+  it("should not allow editing a pending invite", () => {
+    mockIsInvitePending = true;
+
+    render(<Trip />, { wrapper: ToastProvider });
+
+    expect(screen.queryByLabelText("Editar viagem")).toBeNull();
+  });
+
+  it("should show activities and details for a confirmed trip", () => {
+    render(<Trip />, { wrapper: ToastProvider });
+
+    expect(screen.getByText("activities-tab")).toBeTruthy();
+    expect(screen.getByText("Atividades")).toBeTruthy();
+    expect(screen.getByText("Detalhes")).toBeTruthy();
+    expect(screen.getByLabelText("Editar viagem")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Confirme sua presença pelo link enviado ao seu e-mail para ver atividades, links e participantes.",
+      ),
+    ).toBeNull();
   });
 
   it("should not show the attendance confirmation for the legacy participants link", () => {

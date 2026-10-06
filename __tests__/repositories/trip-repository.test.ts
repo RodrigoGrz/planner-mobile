@@ -1,5 +1,6 @@
 import {
   getTravelerTrips,
+  isTripInvitePending,
   removeTripLocally,
   setNextTripId,
   upsertTravelerTrips,
@@ -106,6 +107,37 @@ describe("trip-repository", () => {
       expect.stringContaining("INSERT INTO trips"),
       expect.arrayContaining(["t1", "Paris"]),
     );
+  });
+
+  describe("isTripInvitePending", () => {
+    function mockTravelerTrip(row: { is_confirmed: number } | null) {
+      mockGetFirstAsync.mockImplementation(async (sql: string) =>
+        sql.includes("FROM traveler_trips") ? row : null,
+      );
+    }
+
+    it("should report a pending invite when the traveler trip is not confirmed", async () => {
+      mockTravelerTrip({ is_confirmed: 0 });
+
+      await expect(isTripInvitePending("trip-1")).resolves.toBe(true);
+
+      const travelerTripQuery = mockGetFirstAsync.mock.calls.find(([sql]) =>
+        (sql as string).includes("FROM traveler_trips"),
+      );
+      expect(travelerTripQuery?.[1]).toEqual(expect.arrayContaining(["trip-1"]));
+    });
+
+    it("should not report a pending invite for a confirmed traveler trip", async () => {
+      mockTravelerTrip({ is_confirmed: 1 });
+
+      await expect(isTripInvitePending("trip-1")).resolves.toBe(false);
+    });
+
+    it("should not report a pending invite when there is no traveler trip", async () => {
+      mockTravelerTrip(null);
+
+      await expect(isTripInvitePending("trip-1")).resolves.toBe(false);
+    });
   });
 
   describe("removeTripLocally", () => {

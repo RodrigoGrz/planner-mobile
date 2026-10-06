@@ -2,7 +2,7 @@ import { api } from "./api";
 
 export type Participant = {
   id: string;
-  name: string;
+  name: string | null;
   email: string;
   isConfirmed: boolean;
 };
