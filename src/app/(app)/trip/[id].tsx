@@ -14,20 +14,16 @@ import { useToast } from "@/contexts/ToastContext";
 import { useTripScreenSync } from "@/hooks/useTripScreenSync";
 import { useTrip } from "@/hooks/useTrip";
 import { mutationService } from "@/services/mutation-service";
-import { participantsServer } from "@/server/participants-server";
 import { colors } from "@/styles/colors";
 import { logger } from "@/utils/logger";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
 import { getLocalTodayString, tripDayjs } from "@/utils/trip-dates";
-import { validateInput } from "@/utils/validateInput";
 import {
   CalendarRange,
   Calendar as IconCalendar,
   Info,
-  Mail,
   MapPin,
   Settings2,
-  User,
 } from "lucide-react-native";
 import { Activities } from "./activities";
 import { Details } from "./details";
@@ -47,7 +43,6 @@ enum MODAL {
   NONE = 0,
   UPDATE_TRIP = 1,
   CALENDAR = 2,
-  CONFIRM_ATTENDANCE = 3,
 }
 
 function buildTripData(trip: NonNullable<ReturnType<typeof useTrip>["trip"]>): TripData {
@@ -75,10 +70,7 @@ function buildTripData(trip: NonNullable<ReturnType<typeof useTrip>["trip"]>): T
 
 export default function Trip() {
   const { isOnline } = useNetwork();
-  const tripParams = useLocalSearchParams<{
-    id: string;
-    participants?: string;
-  }>();
+  const tripParams = useLocalSearchParams<{ id: string }>();
 
   const {
     trip: tripFromDb,
@@ -91,25 +83,18 @@ export default function Trip() {
   useTripScreenSync(tripParams.id);
 
   const [isUpdatingTrip, setIsUpdatingTrip] = useState(false);
-  const [isConfirmingAttendance, setIsConfirmingAttendance] = useState(false);
   const [showModal, setShowModal] = useState(MODAL.NONE);
   const [option, setOption] = useState<"activity" | "details">("activity");
   const [destination, setDestination] = useState("");
   const [selectedDates, setSelectedDates] = useState({} as DatesSelected);
-  const [guestName, setGuestName] = useState("");
-  const [guestEmail, setGuestEmail] = useState("");
 
   const trip = tripFromDb ? buildTripData(tripFromDb) : null;
 
   useEffect(() => {
-    if (tripParams.participants) {
-      setShowModal(MODAL.CONFIRM_ATTENDANCE);
-    }
-
     if (!tripParams.id) {
       router.back();
     }
-  }, [tripParams.id, tripParams.participants]);
+  }, [tripParams.id]);
 
   useEffect(() => {
     if (isRemoved) {
@@ -178,43 +163,6 @@ export default function Trip() {
       showError(error, "Não foi possível atualizar a viagem.");
     } finally {
       setIsUpdatingTrip(false);
-    }
-  }
-
-  async function handleConfirmAttendance() {
-    if (!isOnline) {
-      return showErrorMessage("Confirmar presença requer conexão com a internet.");
-    }
-
-    try {
-      if (!tripParams.id || !tripParams.participants) {
-        return;
-      }
-
-      if (!guestName.trim() || !guestEmail.trim()) {
-        return showErrorMessage("Preencha nome e e-mail para confirmar a viagem.");
-      }
-
-      if (!validateInput.email(guestEmail.trim())) {
-        return showErrorMessage("E-mail inválido.");
-      }
-
-      setIsConfirmingAttendance(true);
-
-      await participantsServer.confirmTripByParticipantId({
-        participantId: tripParams.participants,
-        name: guestName,
-        email: guestEmail.trim(),
-      });
-
-      showSuccess("Viagem confirmada com sucesso!");
-
-      setShowModal(MODAL.NONE);
-    } catch (error) {
-      logger.error(error);
-      showError(error, "Não foi possível confirmar sua presença.");
-    } finally {
-      setIsConfirmingAttendance(false);
     }
   }
 
@@ -361,50 +309,6 @@ export default function Trip() {
 
           <Button onPress={() => setShowModal(MODAL.UPDATE_TRIP)}>
             <Button.Title>Confirmar</Button.Title>
-          </Button>
-        </View>
-      </Modal>
-
-      <Modal
-        title="Confirmar presença"
-        visible={showModal === MODAL.CONFIRM_ATTENDANCE}
-      >
-        <View className="gap-4 mt-4">
-          <Text className="text-zinc-400 font-regular leading-6">
-            Você foi convidado (a) para participar de uma viagem para
-            <Text className="font-semibold text-zinc-100">
-              {" "}
-              {trip.destination}{" "}
-            </Text>
-            nas datas de{" "}
-            <Text className="font-semibold text-zinc-100">
-              {tripDayjs(trip.startsAt).date()} a {tripDayjs(trip.endsAt).date()} de{" "}
-              {tripDayjs(trip.endsAt).format("MMMM")}. {"\n\n"}
-            </Text>
-            Para confirmar sua presença na viagem, preencha os dados abaixo:
-          </Text>
-
-          <Input variant="secondary">
-            <User color={colors.zinc[400]} size={20} />
-            <Input.Field
-              placeholder="Seu nome completo"
-              onChangeText={setGuestName}
-            />
-          </Input>
-
-          <Input variant="secondary">
-            <Mail color={colors.zinc[400]} size={20} />
-            <Input.Field
-              placeholder="E-mail de confirmação"
-              onChangeText={setGuestEmail}
-            />
-          </Input>
-
-          <Button
-            isLoading={isConfirmingAttendance}
-            onPress={handleConfirmAttendance}
-          >
-            <Button.Title>Confirmar minha presença</Button.Title>
           </Button>
         </View>
       </Modal>
