@@ -11,6 +11,7 @@
   },
   "jest": {
     "preset": "react-native",
+    "globalSetup": "<rootDir>/jest.global-setup.js",
     "setupFilesAfterEnv": [
       "<rootDir>/jest.setup.ts"
     ],

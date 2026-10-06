@@ -1,5 +1,4 @@
 import { validateInput } from "@/utils/validateInput";
-import dayjs from "dayjs";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { Alert, Image, Keyboard, Text, View } from "react-native";
@@ -29,8 +28,8 @@ import { useNetwork } from "@/contexts/NetworkContext";
 import { useToast } from "@/contexts/ToastContext";
 import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
-import { toApiDate } from "@/utils/to-api-date";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
+import { getLocalTodayString } from "@/utils/trip-dates";
 import { calendarPermission } from "@/utils/toggle/calendar-permission";
 import { syncTripWithCalendar } from "@/utils/toggle/calendar-sync";
 import { router } from "expo-router";
@@ -166,8 +165,8 @@ export default function Create() {
 
       const { localId } = await mutationService.createTrip({
         destination,
-        startsAt: toApiDate(selectedDates.startsAt?.dateString ?? ""),
-        endsAt: toApiDate(selectedDates.endsAt?.dateString ?? ""),
+        startsAt: selectedDates.startsAt?.dateString ?? "",
+        endsAt: selectedDates.endsAt?.dateString ?? "",
         emailsToInvite: emailsToInvite,
         ownerName: user?.name ?? "",
         coverImageUri: selectedImage,
@@ -361,7 +360,7 @@ export default function Create() {
       >
         <View className="gap-4 mt-4">
           <CalendarIcon
-            minDate={dayjs().toISOString()}
+            minDate={getLocalTodayString()}
             onDayPress={handleSelectDate}
             markedDates={selectedDates.dates}
           />

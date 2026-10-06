@@ -1,9 +1,11 @@
 import {
+  getActivitiesByTripIdGrouped,
   markActivitySyncedWithoutRemoteId,
   mergeActivitiesFromServer,
 } from "@/repositories/activity-repository";
 
 const mockRunAsync = jest.fn();
+const mockGetAllAsync = jest.fn();
 const mockWithTransactionAsync = jest.fn(
   async (callback: () => Promise<void>) => {
     await callback();
@@ -14,6 +16,7 @@ jest.mock("@/database/database", () => ({
   getDatabase: jest.fn(() =>
     Promise.resolve({
       runAsync: mockRunAsync,
+      getAllAsync: mockGetAllAsync,
       withTransactionAsync: mockWithTransactionAsync,
     }),
   ),
@@ -34,9 +37,67 @@ function insertCalls() {
   );
 }
 
+function activityRow(id: string, occursAt: string) {
+  return {
+    id,
+    trip_id: "trip-1",
+    title: `Atividade ${id}`,
+    occurs_at: occursAt,
+    remote_id: id,
+    sync_status: "synced",
+    last_sync_error: null,
+  };
+}
+
 describe("activity-repository", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe("grouped activities in Sao Paulo", () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    beforeEach(() => {
+      mockGetAllAsync.mockResolvedValue([
+        activityRow("late", "2026-10-05T22:00:00.000Z"),
+        activityRow("early", "2026-10-05T02:00:00.000Z"),
+      ]);
+    });
+
+    it("should group activities by their wall clock day", async () => {
+      const sections = await getActivitiesByTripIdGrouped("trip-1");
+
+      expect(sections).toHaveLength(1);
+      expect(sections[0].title.dayNumber).toBe(5);
+      expect(sections[0].data.map((activity) => activity.id)).toEqual([
+        "early",
+        "late",
+      ]);
+    });
+
+    it("should show the activity hour in 24h wall clock time", async () => {
+      const sections = await getActivitiesByTripIdGrouped("trip-1");
+
+      expect(sections[0].data.map((activity) => activity.hour)).toEqual([
+        "02:00h",
+        "22:00h",
+      ]);
+    });
+
+    it("should mark only activities before the local wall clock time as past", async () => {
+      jest.useFakeTimers({ now: new Date(2026, 9, 5, 20, 0, 0) });
+
+      const sections = await getActivitiesByTripIdGrouped("trip-1");
+
+      expect(
+        sections[0].data.map((activity) => [activity.id, activity.isBefore]),
+      ).toEqual([
+        ["early", true],
+        ["late", false],
+      ]);
+    });
   });
 
   it("should mark an activity as synced keeping its local id", async () => {

@@ -34,15 +34,23 @@ jest.mock("react-native-safe-area-context", () => ({
 
 jest.mock("lucide-react-native", () => new Proxy({}, { get: () => () => null }));
 
+let mockCalendarProps: Record<string, unknown> = {};
+
 jest.mock("@/components/calendar", () => {
   const { Text, TouchableOpacity } = require("react-native");
 
   return {
-    Calendar: ({ onDayPress }: any) => (
-      <TouchableOpacity onPress={() => onDayPress({ dateString: "2026-10-02" })}>
-        <Text>pick-day</Text>
-      </TouchableOpacity>
-    ),
+    Calendar: (props: any) => {
+      mockCalendarProps = props;
+
+      return (
+        <TouchableOpacity
+          onPress={() => props.onDayPress({ dateString: "2026-10-02" })}
+        >
+          <Text>pick-day</Text>
+        </TouchableOpacity>
+      );
+    },
   };
 });
 
@@ -91,7 +99,13 @@ const tripDetails = {
   when: "Paris de 01 a 05 de out.",
 };
 
-function submitNewActivity({ filled }: { filled: boolean }) {
+function submitNewActivity({
+  filled,
+  hour = "14",
+}: {
+  filled: boolean;
+  hour?: string;
+}) {
   render(<Activities tripDetails={tripDetails} />, { wrapper: ToastProvider });
 
   fireEvent.press(screen.getByText("Nova atividade"));
@@ -101,7 +115,7 @@ function submitNewActivity({ filled }: { filled: boolean }) {
     fireEvent(screen.getByPlaceholderText("Data"), "pressIn");
     fireEvent.press(screen.getByText("pick-day"));
     fireEvent.press(screen.getByText("Confirmar"));
-    fireEvent.changeText(screen.getByPlaceholderText("Horário?"), "14");
+    fireEvent.changeText(screen.getByPlaceholderText("Horário?"), hour);
   }
 
   fireEvent.press(screen.getByText("Salvar atividade"));
@@ -146,6 +160,44 @@ describe("Activities", () => {
     expect(screen.queryByText("Cadastrar atividade")).toBeNull();
     expect(mockRefresh).toHaveBeenCalled();
     expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it("should create the activity with the selected day and hour", async () => {
+    (mutationService.createActivity as jest.Mock).mockResolvedValue({});
+
+    submitNewActivity({ filled: true, hour: "22" });
+
+    expect(
+      await screen.findByText("Nova atividade cadastrada com sucesso!"),
+    ).toBeTruthy();
+    expect(mutationService.createActivity).toHaveBeenCalledWith({
+      tripId: "trip-1",
+      title: "Museu",
+      date: "2026-10-02",
+      hour: 22,
+    });
+  });
+
+  it("should show an error for an hour outside 0 to 23", async () => {
+    submitNewActivity({ filled: true, hour: "25" });
+
+    expect(
+      await screen.findByText("Informe um horário entre 0 e 23."),
+    ).toBeTruthy();
+    expect(mutationService.createActivity).not.toHaveBeenCalled();
+  });
+
+  it("should limit the activity calendar to the trip days", () => {
+    render(<Activities tripDetails={tripDetails} />, { wrapper: ToastProvider });
+
+    fireEvent.press(screen.getByText("Nova atividade"));
+    fireEvent(screen.getByPlaceholderText("Data"), "pressIn");
+
+    expect(mockCalendarProps).toMatchObject({
+      initialDate: "2026-10-01",
+      minDate: "2026-10-01",
+      maxDate: "2026-10-05",
+    });
   });
 
   it("should show an offline info toast when saving offline", async () => {

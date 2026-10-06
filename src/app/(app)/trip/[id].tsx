@@ -1,4 +1,3 @@
-import dayjs from "dayjs";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Keyboard, Text, TouchableOpacity, View } from "react-native";
@@ -18,8 +17,8 @@ import { mutationService } from "@/services/mutation-service";
 import { participantsServer } from "@/server/participants-server";
 import { colors } from "@/styles/colors";
 import { logger } from "@/utils/logger";
-import { toApiDate } from "@/utils/to-api-date";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
+import { getLocalTodayString, tripDayjs } from "@/utils/trip-dates";
 import { validateInput } from "@/utils/validateInput";
 import {
   CalendarRange,
@@ -58,9 +57,9 @@ function buildTripData(trip: NonNullable<ReturnType<typeof useTrip>["trip"]>): T
       ? trip.destination.slice(0, maxLengthDestination) + "..."
       : trip.destination;
 
-  const starts_at = dayjs(trip.startsAt).format("DD");
-  const ends_at = dayjs(trip.endsAt).format("DD");
-  const month = dayjs(trip.startsAt).format("MMM");
+  const starts_at = tripDayjs(trip.startsAt).format("DD");
+  const ends_at = tripDayjs(trip.endsAt).format("DD");
+  const month = tripDayjs(trip.startsAt).format("MMM");
 
   return {
     id: trip.id,
@@ -125,24 +124,11 @@ export default function Trip() {
 
     setDestination(tripFromDb.destination);
 
-    const startsAtCalendar = {
-      dateString: dayjs(tripFromDb.startsAt).format("YYYY-MM-DD"),
-      day: dayjs(tripFromDb.startsAt).date(),
-      month: dayjs(tripFromDb.startsAt).month() + 1,
-      year: dayjs(tripFromDb.startsAt).year(),
-      timestamp: dayjs(tripFromDb.startsAt).valueOf(),
-    };
-
-    const endsAtCalendar = {
-      dateString: dayjs(tripFromDb.endsAt).format("YYYY-MM-DD"),
-      day: dayjs(tripFromDb.endsAt).date(),
-      month: dayjs(tripFromDb.endsAt).month() + 1,
-      year: dayjs(tripFromDb.endsAt).year(),
-      timestamp: dayjs(tripFromDb.endsAt).valueOf(),
-    };
-
     setSelectedDates(
-      calendarUtils.createFromInterval(startsAtCalendar, endsAtCalendar),
+      calendarUtils.createFromInterval(
+        calendarUtils.toCalendarDate(tripFromDb.startsAt),
+        calendarUtils.toCalendarDate(tripFromDb.endsAt),
+      ),
     );
   }, [tripFromDb]);
 
@@ -173,8 +159,8 @@ export default function Trip() {
       await mutationService.updateTrip({
         tripId: trip.id,
         destination,
-        startsAt: toApiDate(selectedDates.startsAt.dateString),
-        endsAt: toApiDate(selectedDates.endsAt.dateString),
+        startsAt: selectedDates.startsAt.dateString,
+        endsAt: selectedDates.endsAt.dateString,
       });
 
       if (isOnline) {
@@ -368,7 +354,7 @@ export default function Trip() {
       >
         <View className="gap-4 mt-4">
           <Calendar
-            minDate={dayjs().toISOString()}
+            minDate={getLocalTodayString()}
             onDayPress={handleSelectDate}
             markedDates={selectedDates.dates}
           />
@@ -392,8 +378,8 @@ export default function Trip() {
             </Text>
             nas datas de{" "}
             <Text className="font-semibold text-zinc-100">
-              {dayjs(trip.startsAt).date()} a {dayjs(trip.endsAt).date()} de{" "}
-              {dayjs(trip.endsAt).format("MMMM")}. {"\n\n"}
+              {tripDayjs(trip.startsAt).date()} a {tripDayjs(trip.endsAt).date()} de{" "}
+              {tripDayjs(trip.endsAt).format("MMMM")}. {"\n\n"}
             </Text>
             Para confirmar sua presença na viagem, preencha os dados abaixo:
           </Text>

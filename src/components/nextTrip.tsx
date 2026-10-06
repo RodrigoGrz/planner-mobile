@@ -1,5 +1,5 @@
 import { TripDetails } from "@/server/trip-server";
-import dayjs from "dayjs";
+import { tripDayjs } from "@/utils/trip-dates";
 import { Image, Text, View } from "react-native";
 
 interface NextTripProps {
@@ -27,8 +27,8 @@ export function NextTrip({ trip }: NextTripProps) {
             {trip.destination}
           </Text>
           <Text className="text-zinc-300">
-            {dayjs(trip.startsAt).date()} a {dayjs(trip.endsAt).date()} de{" "}
-            {dayjs(trip.endsAt).format("MMMM")}.
+            {tripDayjs(trip.startsAt).date()} a {tripDayjs(trip.endsAt).date()} de{" "}
+            {tripDayjs(trip.endsAt).format("MMMM")}.
           </Text>
         </View>
       </View>

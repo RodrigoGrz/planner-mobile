@@ -13,6 +13,7 @@ export const ERROR_MESSAGES = {
   sessionExpired:
     "Sua sessão expirou. Entre novamente para sincronizar suas alterações.",
   sessionExpiredWithoutChanges: "Sua sessão expirou. Entre novamente.",
+  invalidActivityHour: "Informe um horário entre 0 e 23.",
   syncFailures: (count: number) =>
     `${count} alterações não puderam ser sincronizadas.`,
 } as const;

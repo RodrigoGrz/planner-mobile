@@ -55,15 +55,23 @@ jest.mock("react-native-safe-area-context", () => ({
 
 jest.mock("lucide-react-native", () => new Proxy({}, { get: () => () => null }));
 
+let mockCalendarProps: Record<string, unknown> = {};
+
 jest.mock("@/components/calendar", () => {
   const { Text, TouchableOpacity } = require("react-native");
 
   return {
-    Calendar: ({ onDayPress }: any) => (
-      <TouchableOpacity onPress={() => onDayPress({ dateString: "2030-10-01" })}>
-        <Text>pick-day</Text>
-      </TouchableOpacity>
-    ),
+    Calendar: (props: any) => {
+      mockCalendarProps = props;
+
+      return (
+        <TouchableOpacity
+          onPress={() => props.onDayPress({ dateString: "2030-10-01" })}
+        >
+          <Text>pick-day</Text>
+        </TouchableOpacity>
+      );
+    },
   };
 });
 
@@ -158,6 +166,28 @@ describe("Create", () => {
       expect.any(Array),
     );
     expect(await screen.findByText("Viagem criada com sucesso!")).toBeTruthy();
+  });
+
+  it("should create the trip with the selected calendar days", async () => {
+    submitNewTrip();
+
+    expect(await screen.findByText("Viagem criada com sucesso!")).toBeTruthy();
+    expect(mutationService.createTrip).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startsAt: "2030-10-01",
+        endsAt: "2030-10-05",
+      }),
+    );
+  });
+
+  it("should allow today as the first day late at night", () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 1, 22, 0, 0) });
+
+    render(<Create />, { wrapper: ToastProvider });
+    fireEvent(screen.getByPlaceholderText("Quando?"), "pressIn");
+
+    expect(mockCalendarProps.minDate).toBe("2026-10-01");
+    jest.useRealTimers();
   });
 
   it("should show an error when creating the trip fails", async () => {

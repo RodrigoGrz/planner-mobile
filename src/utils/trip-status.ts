@@ -1,11 +1,10 @@
-import dayjs from "dayjs";
+import { compareTripDayWithToday } from "@/utils/trip-dates";
 
 export function getTripStatus(startsAt: string, endsAt: string) {
-  const today = dayjs();
+  const position = compareTripDayWithToday(startsAt, endsAt);
 
-  const isPending = today.isBefore(dayjs(startsAt), "day");
-  const isFinished = today.isAfter(dayjs(endsAt), "day");
-  const isStarted = !isPending && !isFinished;
+  const isFinished = position === "after";
+  const isStarted = position === "during";
 
   return {
     label: isFinished ? "Realizada" : isStarted ? "Em andamento" : "Pendente",
