@@ -4,9 +4,7 @@ import { Alert } from "react-native";
 
 import Trip from "@/app/(app)/trip/[id]";
 import { ToastProvider } from "@/contexts/ToastContext";
-import { participantsServer } from "@/server/participants-server";
 import { mutationService } from "@/services/mutation-service";
-import { AppError } from "@/utils/app-error";
 import "@/utils/dayjsLocaleConfig";
 
 let mockIsOnline = true;
@@ -49,10 +47,6 @@ jest.mock("@/hooks/useTripScreenSync", () => ({
 
 jest.mock("@/services/mutation-service", () => ({
   mutationService: { updateTrip: jest.fn() },
-}));
-
-jest.mock("@/server/participants-server", () => ({
-  participantsServer: { confirmTripByParticipantId: jest.fn() },
 }));
 
 jest.mock("@/app/(app)/trip/activities", () => ({
@@ -244,22 +238,14 @@ describe("Trip", () => {
     );
   });
 
-  it("should show the api message when confirming attendance fails", async () => {
+  it("should not show the attendance confirmation for the legacy participants link", () => {
     mockSearchParams = { id: "trip-1", participants: "participant-1" };
-    (participantsServer.confirmTripByParticipantId as jest.Mock).mockRejectedValue(
-      new AppError("Convite expirado.", { status: 410 }),
-    );
 
     render(<Trip />, { wrapper: ToastProvider });
 
-    fireEvent.changeText(screen.getByPlaceholderText("Seu nome completo"), "Ana");
-    fireEvent.changeText(
-      screen.getByPlaceholderText("E-mail de confirmação"),
-      "ana@mail.com",
-    );
-    fireEvent.press(screen.getByText("Confirmar minha presença"));
-
-    expect(await screen.findByText("Convite expirado.")).toBeTruthy();
-    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(screen.queryByText("Confirmar presença")).toBeNull();
+    expect(screen.queryByPlaceholderText("Seu nome completo")).toBeNull();
+    expect(screen.queryByPlaceholderText("E-mail de confirmação")).toBeNull();
+    expect(screen.getByDisplayValue("Paris de 01 a 05 de out.")).toBeTruthy();
   });
 });
