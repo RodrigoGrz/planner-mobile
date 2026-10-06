@@ -4,8 +4,30 @@ import { api } from "@/server/api";
 jest.mock("@/server/api", () => ({
   api: {
     get: jest.fn(),
+    post: jest.fn(),
   },
 }));
+
+describe("tripServer.uploadTripImage", () => {
+  it("should upload the cover as a JPEG file", async () => {
+    (api.post as jest.Mock).mockResolvedValue({});
+    const appendSpy = jest.spyOn(FormData.prototype, "append");
+
+    await tripServer.uploadTripImage("trip-1", "file:///cache/converted.jpg");
+
+    const [route, formData, config] = (api.post as jest.Mock).mock.calls[0];
+    expect(route).toBe("/trips/trip-1/image");
+    expect(formData).toBeInstanceOf(FormData);
+    expect(config).toEqual({ headers: { "Content-Type": "multipart/form-data" } });
+    expect(appendSpy).toHaveBeenCalledWith("file", {
+      uri: "file:///cache/converted.jpg",
+      name: "cover.jpg",
+      type: "image/jpeg",
+    });
+
+    appendSpy.mockRestore();
+  });
+});
 
 describe("tripServer.getById", () => {
   it("should parse string dates from api response", async () => {

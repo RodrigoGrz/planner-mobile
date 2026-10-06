@@ -24,6 +24,8 @@ export const ERROR_MESSAGES = {
   invalidName: "O nome deve ter entre 3 e 100 caracteres.",
   invalidEmail: "E-mail inválido.",
   duplicatedInvite: "E-mail já foi adicionado.",
+  coverImagePreparationFailed: "Não foi possível preparar a imagem.",
+  coverImageStillPreparing: "Aguarde a imagem ficar pronta.",
   requiredActivityFields: "Preencha todos os campos.",
   invalidPassword: "A senha deve ter entre 8 caracteres e 72 bytes.",
   invalidPhone: "Informe um telefone válido, com DDD.",

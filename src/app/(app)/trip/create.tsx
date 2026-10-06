@@ -35,6 +35,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
 import { calendarUtils, DatesSelected } from "@/utils/calendarUtils";
+import { logger } from "@/utils/logger";
+import { prepareCoverImage } from "@/utils/prepare-cover-image";
 import { exceedsMaxTripDuration, getLocalTodayString } from "@/utils/trip-dates";
 import { calendarPermission } from "@/utils/toggle/calendar-permission";
 import { syncTripWithCalendar } from "@/utils/toggle/calendar-sync";
@@ -65,11 +67,16 @@ export default function Create() {
   const [emailToInvite, setEmailToInvite] = useState("");
   const [emailsToInvite, setEmailsToInvite] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isPreparingImage, setIsPreparingImage] = useState(false);
   const [isEnabled, setIsEnabled] = useState(false);
 
   const [showModal, setShowModal] = useState(MODAL.NONE);
 
   function handleNextStepForm() {
+    if (isPreparingImage) {
+      return showInfo(ERROR_MESSAGES.coverImageStillPreparing);
+    }
+
     if (
       destination.trim().length === 0 ||
       !selectedDates.startsAt ||
@@ -210,14 +217,27 @@ export default function Create() {
   }
 
   async function pickImageAsync() {
-    let result = await ImagePicker.launchImageLibraryAsync({
+    if (isPreparingImage) {
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: true,
       quality: 1,
     });
 
     if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri);
+      setIsPreparingImage(true);
+
+      try {
+        setSelectedImage(await prepareCoverImage(result.assets[0]));
+      } catch (error) {
+        logger.warn("Cover image preparation failed:", error);
+        showErrorMessage(ERROR_MESSAGES.coverImagePreparationFailed);
+      } finally {
+        setIsPreparingImage(false);
+      }
     } else if (selectedImage) {
       showInfo("A imagem anterior foi mantida.");
     } else {
@@ -278,7 +298,11 @@ export default function Create() {
         </Toggle>
 
         <View className="border-b py-3 border-zinc-800">
-          {selectedImage ? (
+          {isPreparingImage ? (
+            <Button variant="secondary" isLoading>
+              <Button.Title>Preparando imagem...</Button.Title>
+            </Button>
+          ) : selectedImage ? (
             <Button
               variant="secondary"
               onPress={() => setShowModal(MODAL.IMAGE)}

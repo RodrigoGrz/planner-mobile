@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { Alert, AlertButton } from "react-native";
@@ -6,6 +12,7 @@ import { Alert, AlertButton } from "react-native";
 import Create from "@/app/(app)/trip/create";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { mutationService } from "@/services/mutation-service";
+import { prepareCoverImage } from "@/utils/prepare-cover-image";
 import { syncTripWithCalendar } from "@/utils/toggle/calendar-sync";
 
 let mockIsOnline = true;
@@ -16,6 +23,10 @@ jest.mock("expo-router", () => ({
 
 jest.mock("expo-image-picker", () => ({
   launchImageLibraryAsync: jest.fn(),
+}));
+
+jest.mock("@/utils/prepare-cover-image", () => ({
+  prepareCoverImage: jest.fn(),
 }));
 
 jest.mock("@/hooks/useAuth", () => ({
@@ -399,5 +410,113 @@ describe("Create", () => {
     fireEvent.press(screen.getByText("Imagem do lugar"));
 
     expect(await screen.findByText("Nenhuma imagem selecionada.")).toBeTruthy();
+  });
+
+  describe("cover image", () => {
+    const pickedPhoto = {
+      uri: "file:///cache/photo.heic",
+      width: 4032,
+      height: 3024,
+    };
+
+    beforeEach(() => {
+      (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+        canceled: false,
+        assets: [pickedPhoto],
+      });
+    });
+
+    async function pickCoverAndCreateTrip() {
+      render(<Create />, { wrapper: ToastProvider });
+
+      fireEvent.press(screen.getByText("Imagem do lugar"));
+      await waitFor(() => {
+        expect(prepareCoverImage).toHaveBeenCalled();
+      });
+
+      fillTripDetails();
+      fireEvent.press(screen.getByText("Continuar"));
+      fireEvent.press(screen.getByText("Confirmar Viagem"));
+    }
+
+    it("should create the trip with the converted cover image", async () => {
+      (prepareCoverImage as jest.Mock).mockResolvedValue(
+        "file:///cache/converted.jpg",
+      );
+
+      await pickCoverAndCreateTrip();
+
+      expect(await screen.findByText("Viagem criada com sucesso!")).toBeTruthy();
+      expect(prepareCoverImage).toHaveBeenCalledWith(pickedPhoto);
+      expect(mutationService.createTrip).toHaveBeenCalledWith(
+        expect.objectContaining({ coverImageUri: "file:///cache/converted.jpg" }),
+      );
+    });
+
+    function deferCoverPreparation() {
+      let finish: (uri: string) => void = () => {};
+      (prepareCoverImage as jest.Mock).mockReturnValue(
+        new Promise<string>((resolve) => {
+          finish = resolve;
+        }),
+      );
+
+      return (uri: string) => finish(uri);
+    }
+
+    it("should show the cover image as preparing until the conversion finishes", async () => {
+      const finishPreparation = deferCoverPreparation();
+      render(<Create />, { wrapper: ToastProvider });
+
+      fireEvent.press(screen.getByText("Imagem do lugar"));
+
+      expect(await screen.findByText("Preparando imagem...")).toBeTruthy();
+
+      await act(async () => {
+        finishPreparation("file:///cache/converted.jpg");
+      });
+
+      expect(await screen.findByText("Alterar imagem")).toBeTruthy();
+      expect(screen.queryByText("Preparando imagem...")).toBeNull();
+    });
+
+    it("should not continue while the cover image is being prepared", async () => {
+      deferCoverPreparation();
+      render(<Create />, { wrapper: ToastProvider });
+
+      fireEvent.press(screen.getByText("Imagem do lugar"));
+      await screen.findByText("Preparando imagem...");
+
+      fillTripDetails();
+      fireEvent.press(screen.getByText("Continuar"));
+
+      expect(await screen.findByText("Aguarde a imagem ficar pronta.")).toBeTruthy();
+      expect(screen.queryByText("Confirmar Viagem")).toBeNull();
+    });
+
+    it("should not open the picker again while the cover image is being prepared", async () => {
+      deferCoverPreparation();
+      render(<Create />, { wrapper: ToastProvider });
+
+      fireEvent.press(screen.getByText("Imagem do lugar"));
+      fireEvent.press(await screen.findByText("Preparando imagem..."));
+
+      expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledTimes(1);
+    });
+
+    it("should keep no cover and warn when the image cannot be prepared", async () => {
+      (prepareCoverImage as jest.Mock).mockRejectedValue(new Error("decode failed"));
+
+      await pickCoverAndCreateTrip();
+
+      expect(
+        await screen.findByText("Não foi possível preparar a imagem."),
+      ).toBeTruthy();
+      await waitFor(() => {
+        expect(mutationService.createTrip).toHaveBeenCalledWith(
+          expect.objectContaining({ coverImageUri: null }),
+        );
+      });
+    });
   });
 });
