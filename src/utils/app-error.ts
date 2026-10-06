@@ -7,6 +7,7 @@ type AppErrorOptions = {
     code?: AppErrorCode;
     cause?: unknown;
     fieldErrors?: FieldErrors;
+    retryAfterMs?: number;
 };
 
 export class AppError extends Error {
@@ -14,6 +15,7 @@ export class AppError extends Error {
     code?: AppErrorCode;
     cause?: unknown;
     fieldErrors?: FieldErrors;
+    retryAfterMs?: number;
 
     constructor(message: string, options: AppErrorOptions = {}) {
         super(message);
@@ -22,6 +24,7 @@ export class AppError extends Error {
         this.code = options.code;
         this.cause = options.cause;
         this.fieldErrors = options.fieldErrors;
+        this.retryAfterMs = options.retryAfterMs;
     }
 }
 

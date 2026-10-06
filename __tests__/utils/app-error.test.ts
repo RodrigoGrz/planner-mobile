@@ -23,6 +23,15 @@ describe("AppError", () => {
     expect(error.code).toBe("NETWORK");
     expect(error.cause).toBe(cause);
   });
+
+  it("should keep the retry after delay", () => {
+    const error = new AppError("Muitas requisições", {
+      status: 429,
+      retryAfterMs: 30000,
+    });
+
+    expect(error.retryAfterMs).toBe(30000);
+  });
 });
 
 describe("getErrorStatus", () => {

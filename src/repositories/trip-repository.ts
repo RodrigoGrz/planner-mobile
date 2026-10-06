@@ -1,6 +1,7 @@
 import { SQLiteDatabase } from "expo-sqlite";
 import { getDatabase } from "@/database/database";
 import { setSyncMetadata } from "@/database/sync-metadata";
+import { removeQueueItemsForTripInTransaction } from "@/repositories/sync-queue-transaction";
 import { EntitySyncStatus } from "@/types/sync";
 import { TripByID, TripDetails } from "@/server/trip-server";
 
@@ -517,6 +518,46 @@ export async function updateTripRemoteIdAfterSync(
   });
 
   return remoteId;
+}
+
+export async function removeTripLocally(tripId: string) {
+  const tripIds = await resolveAllTripIds(tripId);
+  const placeholders = tripIds.map(() => "?").join(", ");
+  const metadataKeys = tripIds.flatMap((id) =>
+    ["trip", "trip_alias", "activities", "links", "participants"].map(
+      (prefix) => `${prefix}:${id}`,
+    ),
+  );
+  const metadataPlaceholders = metadataKeys.map(() => "?").join(", ");
+  const db = await getDatabase();
+
+  await db.withTransactionAsync(async () => {
+    for (const table of ["activities", "links", "participants"]) {
+      await db.runAsync(
+        `DELETE FROM ${table} WHERE trip_id IN (${placeholders})`,
+        tripIds,
+      );
+    }
+
+    await db.runAsync(
+      `DELETE FROM traveler_trips WHERE trip_id IN (${placeholders}) OR remote_id IN (${placeholders})`,
+      [...tripIds, ...tripIds],
+    );
+    await db.runAsync(
+      `DELETE FROM trips WHERE id IN (${placeholders}) OR remote_id IN (${placeholders})`,
+      [...tripIds, ...tripIds],
+    );
+    await db.runAsync(
+      `DELETE FROM sync_metadata
+       WHERE key IN (${metadataPlaceholders})
+          OR (key LIKE 'trip_alias:%' AND value IN (${placeholders}))
+          OR (key = 'next_trip_id' AND value IN (${placeholders}))`,
+      [...metadataKeys, ...tripIds, ...tripIds],
+    );
+    await removeQueueItemsForTripInTransaction(db, tripIds);
+  });
+
+  return tripIds;
 }
 
 export async function markTripImageSyncFailed(tripId: string, errorMessage: string) {

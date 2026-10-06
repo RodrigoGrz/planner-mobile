@@ -81,7 +81,12 @@ export default function Trip() {
     participants?: string;
   }>();
 
-  const { trip: tripFromDb, status, refresh } = useTrip(tripParams.id);
+  const {
+    trip: tripFromDb,
+    status,
+    refresh,
+    isRemoved,
+  } = useTrip(tripParams.id);
   const { showError, showErrorMessage, showSuccess, showInfo } = useToast();
 
   useTripScreenSync(tripParams.id);
@@ -106,6 +111,12 @@ export default function Trip() {
       router.back();
     }
   }, [tripParams.id, tripParams.participants]);
+
+  useEffect(() => {
+    if (isRemoved) {
+      router.navigate("/");
+    }
+  }, [isRemoved]);
 
   useEffect(() => {
     if (!tripFromDb) {

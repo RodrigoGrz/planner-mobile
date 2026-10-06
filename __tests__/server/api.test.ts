@@ -8,12 +8,16 @@ jest.mock("@/storage/auth-token", () => ({
 
 const mockAdapter = jest.fn();
 
-function failWithResponse(status: number, data: unknown) {
+function failWithResponse(
+  status: number,
+  data: unknown,
+  headers: Record<string, string> = {},
+) {
   mockAdapter.mockImplementation((config: InternalAxiosRequestConfig) => {
     const response = {
       status,
       statusText: "",
-      headers: {},
+      headers,
       config,
       data,
     } as AxiosResponse;
@@ -62,6 +66,7 @@ describe("api", () => {
   afterEach(() => {
     unregister?.();
     unregister = undefined;
+    jest.restoreAllMocks();
   });
 
   it("should reject an AppError with the status and the api message", async () => {
@@ -184,6 +189,64 @@ describe("api", () => {
 
     expect(signOut).not.toHaveBeenCalled();
     expect(error).toMatchObject({ status: 401, message: "Credenciais incorretas" });
+  });
+
+  it("should set retryAfterMs from a Retry-After in seconds on a 429", async () => {
+    failWithResponse(
+      429,
+      { message: "Muitas requisições" },
+      { "retry-after": "30" },
+    );
+
+    const error = (await captureError(api.get("/traveler/trips"))) as AppError;
+
+    expect(error).toMatchObject({ status: 429, retryAfterMs: 30000 });
+  });
+
+  it("should set retryAfterMs from a Retry-After http date on a 429", async () => {
+    jest
+      .spyOn(Date, "now")
+      .mockReturnValue(new Date("2026-10-06T12:00:00.000Z").getTime());
+    failWithResponse(
+      429,
+      { message: "Muitas requisições" },
+      { "retry-after": "Tue, 06 Oct 2026 12:00:45 GMT" },
+    );
+
+    const error = (await captureError(api.get("/traveler/trips"))) as AppError;
+
+    expect(error.retryAfterMs).toBe(45000);
+  });
+
+  it("should not set retryAfterMs when Retry-After is missing or invalid", async () => {
+    failWithResponse(429, { message: "Muitas requisições" });
+    const withoutHeader = (await captureError(
+      api.get("/traveler/trips"),
+    )) as AppError;
+
+    failWithResponse(
+      429,
+      { message: "Muitas requisições" },
+      { "retry-after": "logo" },
+    );
+    const withInvalidHeader = (await captureError(
+      api.get("/traveler/trips"),
+    )) as AppError;
+
+    expect(withoutHeader.retryAfterMs).toBeUndefined();
+    expect(withInvalidHeader.retryAfterMs).toBeUndefined();
+  });
+
+  it("should not set retryAfterMs on statuses other than 429", async () => {
+    failWithResponse(
+      503,
+      { message: "Service unavailable" },
+      { "retry-after": "30" },
+    );
+
+    const error = (await captureError(api.get("/traveler/trips"))) as AppError;
+
+    expect(error.retryAfterMs).toBeUndefined();
   });
 
   it("should not call sign out after the handler is unregistered", async () => {
