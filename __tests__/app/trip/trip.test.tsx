@@ -7,6 +7,7 @@ import { ToastProvider } from "@/contexts/ToastContext";
 import { participantsServer } from "@/server/participants-server";
 import { mutationService } from "@/services/mutation-service";
 import { AppError } from "@/utils/app-error";
+import "@/utils/dayjsLocaleConfig";
 
 let mockIsOnline = true;
 let mockSearchParams: { id: string; participants?: string } = { id: "trip-1" };
@@ -24,8 +25,8 @@ jest.mock("@/contexts/NetworkContext", () => ({
 const mockTrip = {
   id: "trip-1",
   destination: "Paris",
-  startsAt: new Date("2030-10-01T12:00:00.000Z"),
-  endsAt: new Date("2030-10-05T12:00:00.000Z"),
+  startsAt: new Date("2030-10-01T00:00:00.000Z"),
+  endsAt: new Date("2030-10-05T00:00:00.000Z"),
   ownerName: "Ana",
   createdAt: new Date("2030-09-01T12:00:00.000Z"),
   updatedAt: new Date("2030-09-01T12:00:00.000Z"),
@@ -76,17 +77,24 @@ jest.mock("@/components/calendar", () => ({
   Calendar: () => null,
 }));
 
-jest.mock("@/utils/calendarUtils", () => ({
-  calendarUtils: {
-    createFromInterval: (startsAt: unknown, endsAt: unknown) => ({
-      startsAt,
-      endsAt,
-      formatDatesInText: "1 a 5 de outubro",
-      dates: {},
-    }),
-    orderStartsAtAndEndsAt: jest.fn(),
-  },
-}));
+jest.mock("@/utils/calendarUtils", () => {
+  const { toTripDayString } = jest.requireActual("@/utils/trip-dates");
+
+  return {
+    calendarUtils: {
+      createFromInterval: (startsAt: unknown, endsAt: unknown) => ({
+        startsAt,
+        endsAt,
+        formatDatesInText: "1 a 5 de outubro",
+        dates: {},
+      }),
+      orderStartsAtAndEndsAt: jest.fn(),
+      toCalendarDate: (value: string | Date) => ({
+        dateString: toTripDayString(value),
+      }),
+    },
+  };
+});
 
 jest.mock("@/components/modal", () => {
   const { Text, View } = require("react-native");
@@ -134,6 +142,27 @@ describe("Trip", () => {
     mockIsRemoved = false;
     mockSearchParams = { id: "trip-1" };
     jest.spyOn(Alert, "alert");
+  });
+
+  it("should show the trip period without shifting the days", () => {
+    render(<Trip />, { wrapper: ToastProvider });
+
+    expect(screen.getByDisplayValue("Paris de 01 a 05 de out.")).toBeTruthy();
+  });
+
+  it("should update the trip with the selected calendar days", async () => {
+    (mutationService.updateTrip as jest.Mock).mockResolvedValue(undefined);
+
+    openUpdateForm();
+    fireEvent.press(screen.getByText("Atualizar"));
+
+    expect(await screen.findByText("Viagem atualizada com sucesso!")).toBeTruthy();
+    expect(mutationService.updateTrip).toHaveBeenCalledWith({
+      tripId: "trip-1",
+      destination: "Paris",
+      startsAt: "2030-10-01",
+      endsAt: "2030-10-05",
+    });
   });
 
   it("should navigate home when the trip is removed", () => {

@@ -1,5 +1,5 @@
 import { TripDetails } from "@/server/trip-server";
-import dayjs from "dayjs";
+import { tripDayjs } from "@/utils/trip-dates";
 import { router } from "expo-router";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { Badge } from "./badge";
@@ -39,8 +39,8 @@ export function TripItem({ trip }: TripItemProps) {
         </View>
 
         <Text className="text-zinc-400">
-          {dayjs(trip.startsAt).date()} a {dayjs(trip.endsAt).date()} de{" "}
-          {dayjs(trip.endsAt).format("MMMM")}.
+          {tripDayjs(trip.startsAt).date()} a {tripDayjs(trip.endsAt).date()} de{" "}
+          {tripDayjs(trip.endsAt).format("MMMM")}.
         </Text>
       </View>
     </TouchableOpacity>

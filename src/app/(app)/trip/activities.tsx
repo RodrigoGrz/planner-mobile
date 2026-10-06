@@ -10,8 +10,9 @@ import { useToast } from "@/contexts/ToastContext";
 import { useActivities } from "@/hooks/useActivities";
 import { mutationService } from "@/services/mutation-service";
 import { colors } from "@/styles/colors";
+import { ERROR_MESSAGES } from "@/utils/error-messages";
 import { logger } from "@/utils/logger";
-import { toApiDate } from "@/utils/to-api-date";
+import { isValidActivityHour, toTripDayString } from "@/utils/trip-dates";
 import dayjs from "dayjs";
 import {
   Clock,
@@ -60,14 +61,20 @@ export function Activities({ tripDetails }: Props) {
         return;
       }
 
+      const hour = Number(activityHour);
+
+      if (!isValidActivityHour(hour)) {
+        showErrorMessage(ERROR_MESSAGES.invalidActivityHour);
+        return;
+      }
+
       setIsCreatingActivity(true);
 
       await mutationService.createActivity({
         tripId: tripDetails.id,
-        occursAt: toApiDate(
-          dayjs(activityDate).add(Number(activityHour), "h"),
-        ),
         title: activityTitle,
+        date: activityDate,
+        hour,
       });
 
       if (isOnline) {
@@ -207,9 +214,9 @@ export function Activities({ tripDetails }: Props) {
           <Calendar
             onDayPress={(day) => setActivityDate(day.dateString)}
             markedDates={{ [activityDate]: { selected: true } }}
-            initialDate={tripDetails.startsAt.toString()}
-            minDate={tripDetails.startsAt.toString()}
-            maxDate={tripDetails.endsAt.toString()}
+            initialDate={toTripDayString(tripDetails.startsAt)}
+            minDate={toTripDayString(tripDetails.startsAt)}
+            maxDate={toTripDayString(tripDetails.endsAt)}
           />
 
           <Button onPress={() => setShowModal(MODAL.NEW_ACTIVITY)}>

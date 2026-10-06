@@ -1,6 +1,6 @@
 import { NextTrip } from "@/components/nextTrip";
 import { render } from "@testing-library/react-native";
-import dayjs from "dayjs";
+import "@/utils/dayjsLocaleConfig";
 
 const tripMock = {
   destination: "Paris",
@@ -13,13 +13,25 @@ describe("NextTrip", () => {
   it("should render trip information", () => {
     const { getByText } = render(<NextTrip trip={tripMock as any} />);
 
-    const expectedText = `${dayjs(tripMock.startsAt).date()} a ${dayjs(
-      tripMock.endsAt,
-    ).date()} de ${dayjs(tripMock.endsAt).format("MMMM")}.`;
-
     expect(getByText("Próxima viagem")).toBeTruthy();
     expect(getByText("Paris")).toBeTruthy();
-    expect(getByText(expectedText)).toBeTruthy();
+    expect(getByText("10 a 15 de maio.")).toBeTruthy();
+  });
+
+  it("should show the trip days without shifting them to the previous day", () => {
+    const { getByText } = render(
+      <NextTrip
+        trip={
+          {
+            ...tripMock,
+            startsAt: "2026-10-01T00:00:00.000Z",
+            endsAt: "2026-10-05T00:00:00.000Z",
+          } as any
+        }
+      />,
+    );
+
+    expect(getByText("1 a 5 de outubro.")).toBeTruthy();
   });
 
   it("should render image when coverImageUrl exists", () => {

@@ -10,13 +10,12 @@ import {
 import { processSyncQueue } from "@/services/sync-engine";
 import { notifyTripDataUpdated } from "@/services/trip-sync-events";
 import {
-  ActivityCreatePayload,
   LinkCreatePayload,
   TripCreatePayload,
   TripUpdatePayload,
 } from "@/types/sync";
 import { generateLocalId } from "@/utils/generate-local-id";
-import { toApiDate } from "@/utils/to-api-date";
+import { toApiActivityDateTime, toApiTripDate } from "@/utils/trip-dates";
 
 type OnlineChecker = () => boolean;
 
@@ -44,8 +43,8 @@ export async function createTrip({
 }) {
   const localId = generateLocalId();
   const participantId = generateLocalId();
-  const normalizedStartsAt = toApiDate(startsAt);
-  const normalizedEndsAt = toApiDate(endsAt);
+  const normalizedStartsAt = toApiTripDate(startsAt);
+  const normalizedEndsAt = toApiTripDate(endsAt);
 
   const payload: TripCreatePayload = {
     destination,
@@ -106,8 +105,8 @@ export async function updateTrip({
   endsAt,
 }: TripUpdatePayload & { tripId: string }) {
   const localTripId = await resolveLocalTripId(tripId);
-  const normalizedStartsAt = toApiDate(startsAt);
-  const normalizedEndsAt = toApiDate(endsAt);
+  const normalizedStartsAt = toApiTripDate(startsAt);
+  const normalizedEndsAt = toApiTripDate(endsAt);
 
   const db = await getDatabase();
 
@@ -139,14 +138,22 @@ export async function updateTrip({
   await runSyncIfOnline();
 }
 
+export type CreateActivityInput = {
+  tripId: string;
+  title: string;
+  date: string;
+  hour: number;
+};
+
 export async function createActivity({
   tripId,
   title,
-  occursAt,
-}: ActivityCreatePayload) {
+  date,
+  hour,
+}: CreateActivityInput) {
   const localId = generateLocalId();
   const localTripId = await resolveLocalTripId(tripId);
-  const normalizedOccursAt = toApiDate(occursAt);
+  const normalizedOccursAt = toApiActivityDateTime(date, hour);
 
   const db = await getDatabase();
 

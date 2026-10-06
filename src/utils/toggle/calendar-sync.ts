@@ -1,4 +1,5 @@
 import { colors } from "@/styles/colors";
+import dayjs from "dayjs";
 import * as Calendar from "expo-calendar";
 import { Platform } from "react-native";
 import { getOrCreateCalendarId } from "./calendar-store";
@@ -18,27 +19,19 @@ export async function syncTripWithCalendar({
 }: SyncTripWithCalendarProps) {
   const calendarId = await getOrCreateCalendarId();
 
-  const startDate = new Date(startsAt);
-  const endDate = new Date(endsAt);
+  const lastDay = dayjs(endsAt).startOf("day");
+  let currentDay = dayjs(startsAt).startOf("day");
 
-  const currentDate = new Date(startDate);
-
-  while (currentDate <= endDate) {
-    const dayStart = new Date(currentDate);
-
-    const dayEnd = new Date(currentDate);
-    dayEnd.setDate(dayEnd.getDate() + 1);
-    dayEnd.setHours(0, 0, 0, 0);
-
+  while (!currentDay.isAfter(lastDay)) {
     await Calendar.createEventAsync(calendarId, {
       allDay: true,
       title: `Viagem: ${destination}`,
-      startDate: dayStart,
-      endDate: dayEnd,
+      startDate: currentDay.toDate(),
+      endDate: currentDay.add(1, "day").toDate(),
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
 
-    currentDate.setDate(currentDate.getDate() + 1);
+    currentDay = currentDay.add(1, "day");
   }
 }
 

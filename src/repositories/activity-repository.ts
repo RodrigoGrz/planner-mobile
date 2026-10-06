@@ -6,6 +6,11 @@ import { setSyncMetadata } from "@/database/sync-metadata";
 import { ActivityProps } from "@/components/activity";
 import { EntitySyncStatus } from "@/types/sync";
 import { resolveLocalTripId, resolveAllTripIds } from "@/repositories/trip-repository";
+import {
+  isWallClockPast,
+  toTripDayString,
+  tripDayjs,
+} from "@/utils/trip-dates";
 
 type ActivityRow = {
   id: string;
@@ -92,7 +97,7 @@ function mapToSections(rows: ActivityRow[]): ActivitySection[] {
   const grouped = new Map<string, ActivityRow[]>();
 
   for (const row of dedupeActivityRows(rows)) {
-    const dateKey = dayjs(row.occurs_at).format("YYYY-MM-DD");
+    const dateKey = toTripDayString(row.occurs_at);
     const existing = grouped.get(dateKey) ?? [];
     existing.push(row);
     grouped.set(dateKey, existing);
@@ -106,12 +111,15 @@ function mapToSections(rows: ActivityRow[]): ActivitySection[] {
         dayName: dayjs(date).format("dddd").replace("-feira", ""),
       },
       data: activities
-        .sort((a, b) => dayjs(a.occurs_at).valueOf() - dayjs(b.occurs_at).valueOf())
+        .sort(
+          (a, b) =>
+            tripDayjs(a.occurs_at).valueOf() - tripDayjs(b.occurs_at).valueOf(),
+        )
         .map((activity) => ({
           id: activity.id,
           title: activity.title,
-          hour: dayjs(activity.occurs_at).format("hh[:]mm[h]"),
-          isBefore: dayjs(activity.occurs_at).isBefore(dayjs()),
+          hour: tripDayjs(activity.occurs_at).format("HH[:]mm[h]"),
+          isBefore: isWallClockPast(activity.occurs_at),
           syncStatus: activity.sync_status,
         }))
         .filter(

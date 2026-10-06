@@ -2,6 +2,8 @@ import dayjs, { Dayjs } from "dayjs";
 import { CalendarUtils, DateData } from "react-native-calendars";
 import { MarkedDates } from "react-native-calendars/src/types";
 
+import { tripDayjs } from "@/utils/trip-dates";
+
 type OrderStartsAtAndEndsAt = {
   startsAt?: DateData;
   endsAt?: DateData;
@@ -124,9 +126,22 @@ function createFromInterval(
   };
 }
 
+function toCalendarDate(value: string | Date): DateData {
+  const day = tripDayjs(value).startOf("day");
+
+  return {
+    dateString: day.format("YYYY-MM-DD"),
+    day: day.date(),
+    month: day.month() + 1,
+    year: day.year(),
+    timestamp: day.valueOf(),
+  };
+}
+
 export const calendarUtils = {
   orderStartsAtAndEndsAt,
   formatDatesInText,
   dateToCalendarDate: CalendarUtils.getCalendarDateString,
   createFromInterval,
+  toCalendarDate,
 };

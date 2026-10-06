@@ -1,6 +1,6 @@
 import { TripItem } from "@/components/tripItem";
 import { fireEvent, render } from "@testing-library/react-native";
-import dayjs from "dayjs";
+import "@/utils/dayjsLocaleConfig";
 
 jest.mock("expo-router", () => ({
   router: {
@@ -33,13 +33,25 @@ describe("TripItem", () => {
   it("should render trip information", () => {
     const { getByText } = render(<TripItem trip={tripMock as any} />);
 
-    const expectedDate = `${dayjs(tripMock.startsAt).date()} a ${dayjs(
-      tripMock.endsAt,
-    ).date()} de ${dayjs(tripMock.endsAt).format("MMMM")}.`;
-
     expect(getByText("Paris")).toBeTruthy();
-    expect(getByText(expectedDate)).toBeTruthy();
+    expect(getByText("10 a 15 de maio.")).toBeTruthy();
     expect(getByText("Badge")).toBeTruthy();
+  });
+
+  it("should show the trip days without shifting them to the previous day", () => {
+    const { getByText } = render(
+      <TripItem
+        trip={
+          {
+            ...tripMock,
+            startsAt: "2026-10-01T00:00:00.000Z",
+            endsAt: "2026-10-05T00:00:00.000Z",
+          } as any
+        }
+      />,
+    );
+
+    expect(getByText("1 a 5 de outubro.")).toBeTruthy();
   });
 
   it("should navigate when pressed", () => {
