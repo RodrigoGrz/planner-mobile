@@ -25,8 +25,20 @@ describe("linksServer.create", () => {
 
     const response = await linksServer.create(link);
 
-    expect(api.post).toHaveBeenCalledWith("/trips/link/register", link);
     expect(response).toEqual({ linkId: "link-remote-1" });
+  });
+
+  it("should create the link with POST /trips/:tripId/links without tripId in the body", async () => {
+    (api.post as jest.Mock).mockResolvedValue({
+      data: { linkId: "link-remote-1" },
+    });
+
+    await linksServer.create(link);
+
+    expect(api.post).toHaveBeenCalledWith("/trips/trip-1/links", {
+      title: "Reserva",
+      url: "https://example.com/reserva",
+    });
   });
 
   it("should return null when the api response has no link id", async () => {

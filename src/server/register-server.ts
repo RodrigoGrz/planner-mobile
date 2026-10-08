@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { routes } from "./routes";
 
 export type Register = {
   name: string;
@@ -8,16 +9,12 @@ export type Register = {
 };
 
 async function registerTraveler({ email, name, password, phone }: Register) {
-  try {
-    await api.post("/travelers/register", {
-      email,
-      name,
-      password,
-      phone,
-    });
-  } catch (error) {
-    throw error;
-  }
+  await api.post(routes.travelers(), {
+    email,
+    name,
+    password,
+    phone,
+  });
 }
 
 export const registerServer = { registerTraveler };

@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { routes } from "./routes";
 
 export type Participant = {
   id: string;
@@ -9,7 +10,7 @@ export type Participant = {
 
 async function getByTripId(tripId: string) {
   const { data } = await api.get<{ participants: Participant[] }>(
-    `/trips/${tripId}/participants`,
+    routes.tripParticipants(tripId),
   );
 
   return data.participants;

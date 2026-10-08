@@ -14,6 +14,17 @@ describe("getFriendlyErrorMessage", () => {
     );
   });
 
+  it("should ask to update the app when the route does not exist", () => {
+    const error = new AppError("Route POST:/travelers/auth not found", {
+      status: 404,
+      code: "ROUTE_NOT_FOUND",
+    });
+
+    expect(getFriendlyErrorMessage(error, FALLBACK)).toBe(
+      "Esta versão do app não é mais compatível com o servidor. Atualize o app.",
+    );
+  });
+
   it("should list translated field labels on validation errors", () => {
     const error = new AppError("Validation error", {
       status: 400,

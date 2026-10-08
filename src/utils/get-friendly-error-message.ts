@@ -33,6 +33,10 @@ export function getFriendlyErrorMessage(error: unknown, fallback: string) {
     return ERROR_MESSAGES.network;
   }
 
+  if (error.code === "ROUTE_NOT_FOUND") {
+    return ERROR_MESSAGES.outdatedApp;
+  }
+
   if (error.status === undefined) {
     return fallback;
   }

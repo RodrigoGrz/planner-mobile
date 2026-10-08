@@ -1,5 +1,6 @@
 import { api } from "./api"
 import { readCreatedId } from "./read-created-id"
+import { routes } from "./routes"
 
 type Activity = {
   id: string
@@ -19,28 +20,18 @@ type ActivityResponse = {
 }
 
 async function create({ tripId, occursAt, title }: ActivityCreate) {
-  try {
-    const { data } = await api.post<unknown>(`/trips/activity/register`, {
-      occursAt,
-      title,
-      tripId,
-    })
+  const { data } = await api.post<unknown>(routes.tripActivities(tripId), {
+    occursAt,
+    title,
+  })
 
-    return { activityId: readCreatedId(data, "activityId") }
-  } catch (error) {
-    throw error
-  }
+  return { activityId: readCreatedId(data, "activityId") }
 }
 
 async function getActivitiesByTripId(tripId: string) {
-  try {
-    const { data } = await api.get<ActivityResponse>(
-      `/trips/${tripId}/activities`
-    )
-    return data.activities
-  } catch (error) {
-    throw error
-  }
+  const { data } = await api.get<ActivityResponse>(routes.tripActivities(tripId))
+
+  return data.activities
 }
 
 export const activitiesServer = { create, getActivitiesByTripId }

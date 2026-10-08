@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { routes } from "./routes";
 import { logger } from "@/utils/logger";
 
 export type TripDetails = {
@@ -47,13 +48,9 @@ function parseTripById(trip: TripByIDResponse): TripByID {
 }
 
 async function getById(id: string) {
-  try {
-    const { data } = await api.get<{ trip: TripByIDResponse }>(`/trips/${id}`);
+  const { data } = await api.get<{ trip: TripByIDResponse }>(routes.trip(id));
 
-    return parseTripById(data.trip);
-  } catch (error) {
-    throw error;
-  }
+  return parseTripById(data.trip);
 }
 
 async function create({
@@ -63,7 +60,7 @@ async function create({
   emails_to_invite,
 }: TripCreate) {
   try {
-    const { data } = await api.post<{ tripId: string }>("/trips/register", {
+    const { data } = await api.post<{ tripId: string }>(routes.trips(), {
       destination,
       startsAt,
       endsAt,
@@ -86,31 +83,19 @@ async function update({
   TripDetails,
   "isConfirmed" | "image" | "participantId" | "coverImageUrl"
 >) {
-  try {
-    await api.put(`/trips/${tripId}/update`, {
-      destination,
-      startsAt,
-      endsAt,
-    });
-  } catch (error) {
-    throw error;
-  }
+  await api.put(routes.trip(tripId), {
+    destination,
+    startsAt,
+    endsAt,
+  });
 }
 
 async function getAllTripsByTraveler() {
-  try {
-    return await api.get("/traveler/trips");
-  } catch (error) {
-    throw error;
-  }
+  return api.get(routes.myTrips());
 }
 
 async function getNextTripsByTraveler() {
-  try {
-    return await api.get("/traveler/next/trip");
-  } catch (error) {
-    throw error;
-  }
+  return api.get(routes.myNextTrip());
 }
 
 async function uploadTripImage(tripId: string, selectedImage: string) {
@@ -122,7 +107,7 @@ async function uploadTripImage(tripId: string, selectedImage: string) {
     type: "image/jpeg",
   } as any);
 
-  await api.post(`/trips/${tripId}/image`, formData, {
+  await api.put(routes.tripCoverImage(tripId), formData, {
     headers: {
       "Content-Type": "multipart/form-data",
     },

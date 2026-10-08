@@ -185,10 +185,52 @@ describe("api", () => {
     unregister = api.registerInterceptTokenManager(signOut);
     failWithResponse(401, { message: "Credenciais incorretas" });
 
-    const error = await captureError(api.post("/travelers/auth"));
+    const error = await captureError(api.post("/sessions"));
 
     expect(signOut).not.toHaveBeenCalled();
     expect(error).toMatchObject({ status: 401, message: "Credenciais incorretas" });
+  });
+
+  it("should not sign out on a 401 from the sign up route", async () => {
+    const signOut = jest.fn();
+    unregister = api.registerInterceptTokenManager(signOut);
+    failWithResponse(401, { message: "Não autorizado" });
+
+    await captureError(api.post("/travelers"));
+
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it("should sign out on a 401 from a route that only resembles an auth route", async () => {
+    const signOut = jest.fn();
+    unregister = api.registerInterceptTokenManager(signOut);
+    failWithResponse(401, { message: "Não autorizado" });
+
+    await captureError(api.get("/travelers"));
+    await captureError(api.get("/sessions/current"));
+
+    expect(signOut).toHaveBeenCalledTimes(2);
+  });
+
+  it("should mark a missing route as ROUTE_NOT_FOUND", async () => {
+    failWithResponse(404, {
+      message: "Route POST:/trips/register not found",
+      error: "Not Found",
+      statusCode: 404,
+    });
+
+    const error = await captureError(api.post("/trips/register"));
+
+    expect(error).toMatchObject({ status: 404, code: "ROUTE_NOT_FOUND" });
+  });
+
+  it("should not mark a missing resource as ROUTE_NOT_FOUND", async () => {
+    failWithResponse(404, { message: "Recurso não encontrado." });
+
+    const error = (await captureError(api.get("/trips/t1"))) as AppError;
+
+    expect(error.status).toBe(404);
+    expect(error.code).toBeUndefined();
   });
 
   it("should set retryAfterMs from a Retry-After in seconds on a 429", async () => {

@@ -173,6 +173,20 @@ describe("AuthContextProvider", () => {
   });
 
   describe("sign in", () => {
+    it("should sign in with POST /sessions", async () => {
+      mockSignInResponse(ana);
+      const { result } = await renderAuth();
+
+      await act(async () => {
+        await result.current.signIn(ana.email, "secret");
+      });
+
+      expect(api.post).toHaveBeenCalledWith("/sessions", {
+        email: ana.email,
+        password: "secret",
+      });
+    });
+
     it("should clear the local database when a different user signs in", async () => {
       mockStoredSession({ lastUserId: ana.id });
       mockSignInResponse(bruno);

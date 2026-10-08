@@ -27,6 +27,14 @@ export function classifySyncError(error: unknown): SyncErrorClassification {
     return { kind: "retryable", message: ERROR_MESSAGES.network };
   }
 
+  if (error instanceof AppError && error.code === "ROUTE_NOT_FOUND") {
+    return {
+      kind: "permanent",
+      status: error.status,
+      message: ERROR_MESSAGES.outdatedApp,
+    };
+  }
+
   const status = getErrorStatus(error);
 
   if (status === undefined || status < 400) {

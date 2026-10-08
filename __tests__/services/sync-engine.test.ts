@@ -565,6 +565,27 @@ describe("sync-engine", () => {
     expect(markActivitySyncFailed).not.toHaveBeenCalled();
   });
 
+  it("should not remove the local trip when the route does not exist", async () => {
+    queueOnce(activityItem);
+    (getStoredRemoteId as jest.Mock).mockResolvedValue("trip-remote-1");
+    (activitiesServer.create as jest.Mock).mockRejectedValue(
+      new AppError("Route POST:/trips/activity/register not found", {
+        status: 404,
+        code: "ROUTE_NOT_FOUND",
+      }),
+    );
+
+    await processSyncQueue();
+
+    expect(removeTripLocally).not.toHaveBeenCalled();
+    expect(markQueueItemFailed).toHaveBeenCalledWith(
+      "queue-1",
+      "Esta versão do app não é mais compatível com o servidor. Atualize o app.",
+      1,
+      null,
+    );
+  });
+
   it("should treat a 404 on a trip without remote id as permanent", async () => {
     queueOnce(
       makeQueueItem({
