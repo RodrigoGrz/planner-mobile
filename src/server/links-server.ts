@@ -1,5 +1,6 @@
 import { api } from "./api";
 import { readCreatedId } from "./read-created-id";
+import { routes } from "./routes";
 
 export type Link = {
   id: string;
@@ -12,26 +13,18 @@ type LinkCreate = Omit<Link, "id"> & {
 };
 
 async function getLinksByTripId(tripId: string) {
-  try {
-    const { data } = await api.get<{ links: Link[] }>(`/trips/${tripId}/links`);
-    return data.links;
-  } catch (error) {
-    throw error;
-  }
+  const { data } = await api.get<{ links: Link[] }>(routes.tripLinks(tripId));
+
+  return data.links;
 }
 
 async function create({ tripId, title, url }: LinkCreate) {
-  try {
-    const { data } = await api.post<unknown>(`/trips/link/register`, {
-      title,
-      url,
-      tripId,
-    });
+  const { data } = await api.post<unknown>(routes.tripLinks(tripId), {
+    title,
+    url,
+  });
 
-    return { linkId: readCreatedId(data, "linkId") };
-  } catch (error) {
-    throw error;
-  }
+  return { linkId: readCreatedId(data, "linkId") };
 }
 
 export const linksServer = { getLinksByTripId, create };

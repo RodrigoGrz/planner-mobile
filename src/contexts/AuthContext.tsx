@@ -9,6 +9,7 @@ import {
 
 import { UserDTO } from "@/dtos/user-dto";
 import { api } from "@/server/api";
+import { routes } from "@/server/routes";
 import {
     storageAuthTokenGet,
     storageAuthTokenRemove,
@@ -62,7 +63,7 @@ export function AuthContextProvider({ children }: AuthContextProviderProps) {
   }
 
   async function signIn(email: string, password: string) {
-    const { data } = await api.post("/travelers/auth", { email, password });
+    const { data } = await api.post(routes.sessions(), { email, password });
 
     if (data.user && data.token) {
       const lastUserId = await storageLastUserIdGet();

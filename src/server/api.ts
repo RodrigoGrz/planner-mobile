@@ -1,3 +1,4 @@
+import { routes } from "@/server/routes";
 import { storageAuthTokenGet } from "@/storage/auth-token";
 import { AppError, FieldErrors } from "@/utils/app-error";
 import axios, { AxiosError, AxiosInstance } from "axios";
@@ -16,10 +17,32 @@ const api = axios.create({
   baseURL: API_URL,
 }) as APIInstanceProps;
 
-const AUTH_PATHS = ["/travelers/auth", "/travelers/register"];
+const AUTH_ROUTES = [
+  { method: "post", url: routes.sessions() },
+  { method: "post", url: routes.travelers() },
+];
 
-function isAuthRequest(url?: string) {
-  return AUTH_PATHS.some((path) => url?.includes(path));
+function isAuthRequest(config?: { method?: string; url?: string }) {
+  return AUTH_ROUTES.some(
+    (route) =>
+      route.method === config?.method?.toLowerCase() && route.url === config?.url,
+  );
+}
+
+const MISSING_ROUTE_MESSAGE = /^Route [A-Z]+:\S+ not found$/;
+
+function isMissingRoute(status: number, data: unknown) {
+  if (status !== 404 || typeof data !== "object" || data === null) {
+    return false;
+  }
+
+  const { error, message } = data as { error?: unknown; message?: unknown };
+
+  return (
+    error === "Not Found" &&
+    typeof message === "string" &&
+    MISSING_ROUTE_MESSAGE.test(message)
+  );
 }
 
 async function readStoredToken() {
@@ -104,6 +127,9 @@ function toAppError(requestError: AxiosError) {
 
   return new AppError(readApiMessage(response.data) ?? requestError.message, {
     status: response.status,
+    code: isMissingRoute(response.status, response.data)
+      ? "ROUTE_NOT_FOUND"
+      : undefined,
     cause: requestError,
     fieldErrors:
       response.status === 400 ? readFieldErrors(response.data) : undefined,
@@ -119,7 +145,7 @@ api.interceptors.response.use(
   (requestError: AxiosError) => {
     if (
       requestError.response?.status === 401 &&
-      !isAuthRequest(requestError.config?.url)
+      !isAuthRequest(requestError.config)
     ) {
       unauthorizedHandler?.();
     }

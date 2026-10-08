@@ -1,4 +1,4 @@
-export type AppErrorCode = "NETWORK";
+export type AppErrorCode = "NETWORK" | "ROUTE_NOT_FOUND";
 
 export type FieldErrors = Record<string, string[]>;
 

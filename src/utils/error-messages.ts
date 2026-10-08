@@ -26,6 +26,8 @@ export const ERROR_MESSAGES = {
   duplicatedInvite: "E-mail já foi adicionado.",
   coverImagePreparationFailed: "Não foi possível preparar a imagem.",
   coverImageStillPreparing: "Aguarde a imagem ficar pronta.",
+  outdatedApp:
+    "Esta versão do app não é mais compatível com o servidor. Atualize o app.",
   requiredActivityFields: "Preencha todos os campos.",
   invalidPassword: "A senha deve ter entre 8 caracteres e 72 bytes.",
   invalidPhone: "Informe um telefone válido, com DDD.",

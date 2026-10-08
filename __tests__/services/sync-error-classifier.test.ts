@@ -81,6 +81,22 @@ describe("sync-error-classifier", () => {
     });
   });
 
+  it("should classify a missing route as permanent with the outdated app message", () => {
+    const result = classifySyncError(
+      new AppError("Route POST:/trips/activity/register not found", {
+        status: 404,
+        code: "ROUTE_NOT_FOUND",
+      }),
+    );
+
+    expect(result).toEqual({
+      kind: "permanent",
+      status: 404,
+      message:
+        "Esta versão do app não é mais compatível com o servidor. Atualize o app.",
+    });
+  });
+
   it("should classify a 404 as not_found", () => {
     const result = classifySyncError(
       new AppError("Recurso não encontrado.", { status: 404 }),
