@@ -32,6 +32,10 @@ export async function syncTravelerTrips() {
 
 export async function syncTripDetail(tripId: string) {
   const remoteTripId = await resolveRemoteId(tripId);
+  if (!remoteTripId) {
+    return null;
+  }
+
   const trip = await tripServer.getById(remoteTripId);
   await upsertTripDetail(trip);
   return trip;
@@ -39,6 +43,10 @@ export async function syncTripDetail(tripId: string) {
 
 export async function syncActivities(tripId: string) {
   const remoteTripId = await resolveRemoteId(tripId);
+  if (!remoteTripId) {
+    return null;
+  }
+
   const activities = await activitiesServer.getActivitiesByTripId(remoteTripId);
   await mergeActivitiesFromServer(tripId, activities);
   return activities;
@@ -46,6 +54,10 @@ export async function syncActivities(tripId: string) {
 
 export async function syncTripDetails(tripId: string) {
   const remoteTripId = await resolveRemoteId(tripId);
+  if (!remoteTripId) {
+    return null;
+  }
+
   const localTripId = await resolveLocalTripId(tripId);
 
   const [links, participants] = await Promise.all([
