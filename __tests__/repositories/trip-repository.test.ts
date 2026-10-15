@@ -2,6 +2,7 @@ import {
   getTravelerTrips,
   isTripInvitePending,
   removeTripLocally,
+  resolveRemoteId,
   setNextTripId,
   upsertTravelerTrips,
   upsertTripDetail,
@@ -34,6 +35,31 @@ jest.mock("@/database/sync-metadata", () => ({
 describe("trip-repository", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetFirstAsync.mockReset();
+  });
+
+  it("should resolve the remote id from a local id after the trip is synced", async () => {
+    mockGetFirstAsync.mockImplementation(async (sql: string) => {
+      if (sql.includes("sync_metadata")) {
+        return { value: "trip-remote-1" };
+      }
+
+      return { id: "trip-remote-1", remote_id: "trip-remote-1" };
+    });
+
+    await expect(resolveRemoteId("trip-local-1")).resolves.toBe("trip-remote-1");
+  });
+
+  it("should return null for a trip that was never synced", async () => {
+    mockGetFirstAsync.mockImplementation(async (sql: string) => {
+      if (sql.includes("sync_metadata")) {
+        return null;
+      }
+
+      return { id: "trip-local-1", remote_id: null };
+    });
+
+    await expect(resolveRemoteId("trip-local-1")).resolves.toBeNull();
   });
 
   it("should map traveler trips from database rows", async () => {

@@ -177,12 +177,16 @@ function getNextRetryAt(retryCount: number) {
 async function isItemReady(item: CoalescedQueueItem) {
   if (item.entityType === "activity" || item.entityType === "link") {
     const payload = item.payload as ActivityCreatePayload | LinkCreatePayload;
-    return isTripAvailableForChildSync(payload.tripId);
+    return Boolean(await resolveRemoteId(payload.tripId));
   }
 
   if (item.entityType === "trip_image") {
     const payload = item.payload as TripImagePayload;
-    return isTripAvailableForChildSync(payload.tripId);
+    return Boolean(await resolveRemoteId(payload.tripId));
+  }
+
+  if (item.entityType === "trip" && item.operation === "update") {
+    return Boolean(await resolveRemoteId(item.entityId));
   }
 
   if (item.dependsOnEntityId) {
@@ -219,6 +223,9 @@ async function processTripUpdate(
 ): Promise<ProcessResult> {
   const payload = item.payload as TripUpdatePayload;
   const remoteTripId = await resolveRemoteId(item.entityId);
+  if (!remoteTripId) {
+    return;
+  }
 
   await markTripSyncing(item.entityId);
 
@@ -296,6 +303,9 @@ async function processActivityCreate(item: CoalescedQueueItem) {
 
   const payload = item.payload as ActivityCreatePayload;
   const remoteTripId = await resolveRemoteId(payload.tripId);
+  if (!remoteTripId) {
+    return;
+  }
 
   await markActivitySyncing(item.entityId);
 
@@ -323,6 +333,9 @@ async function processLinkCreate(item: CoalescedQueueItem) {
 
   const payload = item.payload as LinkCreatePayload;
   const remoteTripId = await resolveRemoteId(payload.tripId);
+  if (!remoteTripId) {
+    return;
+  }
 
   await markLinkSyncing(item.entityId);
 
@@ -345,6 +358,9 @@ async function processLinkCreate(item: CoalescedQueueItem) {
 async function processTripImage(item: CoalescedQueueItem) {
   const payload = item.payload as TripImagePayload;
   const remoteTripId = await resolveRemoteId(payload.tripId);
+  if (!remoteTripId) {
+    return;
+  }
 
   await tripServer.uploadTripImage(remoteTripId, payload.coverImageUri);
   notifyTripDataUpdated(payload.tripId);
@@ -427,6 +443,10 @@ async function isInvitePendingAfterRefresh(tripId: string) {
 }
 
 async function executePullSyncTripData(tripId: string) {
+  if (!(await resolveRemoteId(tripId))) {
+    return;
+  }
+
   const isInvitePending = await isInvitePendingAfterRefresh(tripId);
 
   const results = await Promise.allSettled(
@@ -448,7 +468,11 @@ async function executePullSyncTripData(tripId: string) {
     resolveRemoteId(tripId),
   ]);
 
-  for (const id of new Set([tripId, localTripId, remoteTripId])) {
+  for (const id of new Set(
+    [tripId, localTripId, remoteTripId].filter(
+      (value): value is string => value !== null,
+    ),
+  )) {
     notifyTripDataUpdated(id);
   }
 }

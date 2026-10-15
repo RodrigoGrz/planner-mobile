@@ -12,6 +12,7 @@ import {
   countQueueItemsWaitingToSend,
   getQueueItemsOrdered,
   markQueueItemFailed,
+  markQueueItemSyncing,
   removeQueueItems,
   resetQueueItemsFailedByAuth,
   resetStaleSyncingItems,
@@ -23,6 +24,7 @@ import {
   overwriteTripFromServer,
   removeTripLocally,
   resetTripSyncStatus,
+  resolveRemoteId,
 } from "@/repositories/trip-repository";
 import { activitiesServer } from "@/server/activities-server";
 import { linksServer } from "@/server/links-server";
@@ -106,6 +108,7 @@ jest.mock("@/server/trip-server", () => ({
     create: jest.fn(),
     update: jest.fn(),
     getById: jest.fn(),
+    uploadTripImage: jest.fn(),
   },
 }));
 
@@ -187,6 +190,7 @@ describe("sync-engine", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (resolveRemoteId as jest.Mock).mockResolvedValue("trip-remote-1");
     unsubscribeFailure = subscribeSyncFailure(failureListener);
   });
 
@@ -229,6 +233,66 @@ describe("sync-engine", () => {
     );
     expect(markLinkSyncedWithoutRemoteId).not.toHaveBeenCalled();
     expect(removeQueueItems).toHaveBeenCalledWith(["queue-2"]);
+  });
+
+  it("should upload the cover image to the remote trip id after the trip is created", async () => {
+    const imageItem = makeQueueItem({
+      id: "queue-image-1",
+      entityType: "trip_image",
+      operation: "update",
+      payload: {
+        tripId: "trip-local-1",
+        coverImageUri: "file:///cover.jpg",
+      },
+    });
+    queueOnce(imageItem);
+
+    await processSyncQueue();
+
+    expect(tripServer.uploadTripImage).toHaveBeenCalledWith(
+      "trip-remote-1",
+      "file:///cover.jpg",
+    );
+  });
+
+  it("should create an offline activity on the remote trip id", async () => {
+    const offlineActivityItem = makeQueueItem({
+      payload: {
+        tripId: "trip-local-1",
+        title: "Museu",
+        occursAt: "2026-10-02T14:00:00.000Z",
+      },
+    });
+    queueOnce(offlineActivityItem);
+
+    await processSyncQueue();
+
+    expect(activitiesServer.create).toHaveBeenCalledWith({
+      tripId: "trip-remote-1",
+      title: "Museu",
+      occursAt: "2026-10-02T14:00:00.000Z",
+    });
+  });
+
+  it("should not send child changes while the trip has no remote id", async () => {
+    queueOnce(activityItem);
+    (resolveRemoteId as jest.Mock).mockResolvedValue(null);
+
+    await processSyncQueue();
+
+    expect(activitiesServer.create).not.toHaveBeenCalled();
+    expect(markQueueItemSyncing).not.toHaveBeenCalled();
+  });
+
+  it("should not pull server data for a trip that has no remote id", async () => {
+    (resolveRemoteId as jest.Mock).mockResolvedValue(null);
+
+    await pullSyncTripData("trip-local-1");
+
+    expect(syncTripDetail).not.toHaveBeenCalled();
+    expect(syncActivities).not.toHaveBeenCalled();
+    expect(syncTripDetails).not.toHaveBeenCalled();
+    expect(syncTravelerTrips).not.toHaveBeenCalled();
   });
 
   it("should mark the activity as synced without remote id when the api returns no id", async () => {

@@ -69,7 +69,8 @@ export async function isTripAvailableForChildSync(tripId: string) {
   return Boolean(row?.remote_id);
 }
 
-export async function resolveRemoteId(localId: string) {
+export async function resolveRemoteId(tripId: string) {
+  const localId = await resolveLocalTripId(tripId);
   const db = await getDatabase();
 
   const row = await db.getFirstAsync<{ remote_id: string | null; id: string }>(
@@ -77,22 +78,11 @@ export async function resolveRemoteId(localId: string) {
     [localId, localId],
   );
 
-  if (!row) {
-    return localId;
-  }
-
-  return row.remote_id ?? row.id;
+  return row?.remote_id ?? null;
 }
 
 export async function getStoredRemoteId(entityId: string) {
-  const db = await getDatabase();
-
-  const row = await db.getFirstAsync<{ remote_id: string | null }>(
-    "SELECT remote_id FROM trips WHERE id = ? OR remote_id = ?",
-    [entityId, entityId],
-  );
-
-  return row?.remote_id ?? null;
+  return resolveRemoteId(entityId);
 }
 
 export async function resolveLocalTripId(tripId: string) {
@@ -119,7 +109,13 @@ export async function resolveAllTripIds(tripId: string) {
   const localTripId = await resolveLocalTripId(tripId);
   const remoteTripId = await resolveRemoteId(tripId);
 
-  return [...new Set([tripId, localTripId, remoteTripId])];
+  return [
+    ...new Set(
+      [tripId, localTripId, remoteTripId].filter(
+        (id): id is string => id !== null,
+      ),
+    ),
+  ];
 }
 
 export async function isTripInvitePending(tripId: string) {
